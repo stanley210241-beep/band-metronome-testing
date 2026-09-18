@@ -146,6 +146,33 @@ html[lang="en"] #room .roomcode .role::before{display:none}
 #room details label.setrow span{flex:1;min-width:0}
 /* 英文版的標題本身就是 Sync Metronome，上方那行小字會重複 */
 html[lang="en"] .mark::before{display:none}
+/* 歌單切歌列：表演時要一眼看得到、手指好按 */
+.setbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .6rem;border-radius:16px;
+  border:1px solid color-mix(in srgb, var(--brass) 45%, var(--line));
+  background:color-mix(in srgb, var(--brass) 9%, var(--card))}
+.setbar[hidden]{display:none !important}
+.setbar-info{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.3;text-align:left}
+.setbar-info small{font-size:.72rem;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setbar-info b{font-size:1rem;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.setbar-btn{flex:0 0 auto;height:2.8rem;min-width:2.8rem;padding:0 .8rem;border-radius:12px;
+  border:1px solid var(--line);background:var(--card);color:var(--navy);font-weight:700;font-size:.95rem}
+.setbar-btn.next{background:var(--brass);border-color:var(--brass);color:#fff;padding:0 1.1rem}
+.setbar-btn:disabled{opacity:.4}
+.setbar-btn.next:disabled{background:var(--card);border-color:var(--line);color:var(--mute);opacity:1;font-weight:600}
+.setbar-close{flex:0 0 auto;width:1.8rem;height:1.8rem;border-radius:50%;color:var(--mute);font-size:1rem}
+/* 大數字下面：現在是哪一首 */
+.now-song{display:block;margin-top:.3rem;font-size:.8rem;color:var(--brass);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 .5rem}
+.now-song[hidden]{display:none}
+/* 歌單面板 */
+#room details .song.on .song-main{border-color:var(--brass);box-shadow:inset 3px 0 0 var(--brass)}
+#room details .set-item{cursor:default}
+.set-edit{margin-top:.8rem;padding-top:.7rem;border-top:1px dashed var(--line)}
+.set-edit-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin:0 .9rem .4rem}
+.set-edit-head b{font-size:.9rem;color:var(--on-card, var(--navy))}
+.set-edit-head .btn-link{margin:0;padding:.2rem 0;font-size:.85rem}
+.saverow select{flex:1;min-width:0;border-radius:10px;padding:.55rem .6rem;font-size:.88rem;
+  border:1px solid var(--line);background:var(--card-soft);color:var(--on-card, var(--navy))}
 /* 首頁卡片：原本卡片（#gate::before）是用「畫面高度的百分比」往內縮，內容一多就超出卡片。
    改成卡片永遠包住整個首頁，內容留在卡片內側的留白裡 */
 #gate::before{inset:0 !important}
@@ -1761,9 +1788,22 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
              pattern="[0-9]*" maxlength="3" enterkeyhint="done" autocomplete="off"
              aria-label="輸入速度" data-i18n-aria="bpmInputAria" style="display:none">
       <span class="tempo-label" id="tempoLabel"></span>
+      <!-- 現在是哪一首（套用曲目後全房都看得到） -->
+      <span class="now-song" id="nowSong" hidden></span>
     </div>
 
     <div id="shared">
+      <!-- 歌單切歌列：打開一個歌單後出現，表演時一鍵換下一首（放在共用區裡，上鎖時只有房主能按） -->
+      <div id="setBar" class="setbar" hidden>
+        <div class="setbar-info">
+          <small id="setBarName"></small>
+          <b id="setBarSong"></b>
+        </div>
+        <button class="setbar-btn" id="setPrev" aria-label="上一首" data-i18n-aria="setPrev">◀</button>
+        <button class="setbar-btn next" id="setNext"></button>
+        <button class="setbar-close" id="setClose" aria-label="收起歌單" data-i18n-aria="setClose">×</button>
+      </div>
+
       <div class="beatrow" id="beatRow"></div>
 
       <div class="accrow">
@@ -1846,6 +1886,29 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         </button>
       </div>
       <textarea id="songBox" placeholder="匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。" data-i18n-ph="songBoxPh"></textarea>
+    </details>
+
+    <!-- 歌單（Set）：把曲目排成「11/21 表演」這種清單，表演時一鍵切下一首 -->
+    <details id="setBox">
+      <summary><span data-i18n="setsTitle">歌單</span> <b id="setCount">0 個</b></summary>
+      <div class="songs" id="setList"></div>
+      <div class="saverow">
+        <input id="setName" placeholder="歌單名稱，例如 11/21 表演" data-i18n-ph="setNamePh" maxlength="30" autocomplete="off">
+        <button id="setNew" data-i18n="setNew">新增歌單</button>
+      </div>
+      <!-- 編輯某一個歌單 -->
+      <div id="setEdit" class="set-edit" hidden>
+        <div class="set-edit-head">
+          <b id="setEditName"></b>
+          <button class="btn-link" id="setEditDone" data-i18n="setEditDone">完成</button>
+        </div>
+        <div class="songs" id="setItems"></div>
+        <div class="saverow">
+          <select id="setAddSel" aria-label="選一首曲目加進歌單" data-i18n-aria="setAddAria"></select>
+          <button id="setAdd" data-i18n="setAdd">加入</button>
+        </div>
+      </div>
+      <p class="hint" data-i18n="setHint">點歌單就會開始：節拍器上方會出現「下一首」，按一下全房換成下一首的速度、拍號和重音。按 ✎ 可以加歌、排順序。</p>
     </details>
 
     <!-- 預備拍（可以每個樂句前都重新數，循環練同一段） -->
@@ -2408,6 +2471,28 @@ const UI_ZH = {
   latHint2:    '聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。長時間大音量會傷聽力，而且是不可逆的。',
 
   // 最下面
+  // 歌單
+  setsTitle:   '歌單',
+  setCount:    n => n + ' 個',
+  setNamePh:   '歌單名稱，例如 11/21 表演',
+  setNew:      '新增歌單',
+  setEditDone: '完成',
+  setAdd:      '加入',
+  setAddAria:  '選一首曲目加進歌單',
+  setAddPh:    '選一首曲目…',
+  setHint:     '點歌單就會開始：節拍器上方會出現「下一首」，按一下全房換成下一首的速度、拍號和重音。按 ✎ 可以加歌、排順序。',
+  setInfo:     (n, total) => n + ' 首' + (total ? ' · 全長 ' + total : ''),
+  setEmpty:    '這個歌單還沒有曲目，從下面選一首加進來。',
+  setMissing:  '（這首曲目已經刪除了）',
+  setEditAria: name => '編輯歌單「' + name + '」',
+  setPrev:     '上一首',
+  setNext:     '下一首 ▶',
+  setLast:     '最後一首',
+  setClose:    '收起歌單',
+  setBarPos:   (name, pos, total) => pos + '／' + total + ' · ' + name,   // 位置放前面，名字太長被截斷也看得到第幾首
+  nowSong:     title => '🎵 ' + title,
+  nowSongInSet:(title, set, pos, total) => '🎵 ' + title + '（' + set + ' ' + pos + '/' + total + '）',
+
   // 帳號與雲端
   signIn:      '用 Google 登入',
   signInShort: '登入',
@@ -2577,6 +2662,27 @@ const UI_EN = {
   latHint1:    'If you hear the beat later than everyone else, drag right until you line up. Wired headphones usually need nothing; Bluetooth is typically around 120–250. This only affects you.',
   latHint2:    'Can’t hear it? Try better-isolating headphones before turning the volume up. Long exposure to loud sound damages hearing permanently.',
 
+  setsTitle:   'Setlists',
+  setCount:    n => n + (n === 1 ? ' list' : ' lists'),
+  setNamePh:   'Setlist name, e.g. Nov 21 gig',
+  setNew:      'New setlist',
+  setEditDone: 'Done',
+  setAdd:      'Add',
+  setAddAria:  'Choose a song to add to the setlist',
+  setAddPh:    'Choose a song…',
+  setHint:     'Tap a setlist to start it: a “Next” button appears above the metronome and switches the whole room to the next song’s tempo, meter and accents. Tap ✎ to add songs and reorder.',
+  setInfo:     (n, total) => n + (n === 1 ? ' song' : ' songs') + (total ? ' · ' + total : ''),
+  setEmpty:    'No songs in this setlist yet. Add one below.',
+  setMissing:  '(this song was deleted)',
+  setEditAria: name => 'Edit setlist “' + name + '”',
+  setPrev:     'Previous song',
+  setNext:     'Next ▶',
+  setLast:     'Last song',
+  setClose:    'Close setlist',
+  setBarPos:   (name, pos, total) => pos + '/' + total + ' · ' + name,
+  nowSong:     title => '🎵 ' + title,
+  nowSongInSet:(title, set, pos, total) => '🎵 ' + title + ' (' + set + ' ' + pos + '/' + total + ')',
+
   signIn:      'Sign in with Google',
   signInShort: 'Sign in',
   signOut:     'Sign out',
@@ -2607,6 +2713,11 @@ const LINES_ZH = {
   lockSide:   '鎖沒有辦法從這一側打開。',
   nowOwner:   '房主離開了，現在由你接手。',
   signInFail: '登入沒有成功，再試一次看看。',
+  noSets:     '還沒有歌單。取個名字，例如「11/21 表演」，再把曲目加進去。',
+  noSetName:  '歌單也要有名字，不然表演那天會找不到。',
+  setDeleteAsk: name => '要刪除歌單「' + name + '」嗎？（裡面的曲目不會被刪掉）',
+  setNoSongs: '還沒有曲目，先到「曲目」存幾首',
+  setEmptyPlay:'這個歌單還是空的，先加幾首曲目進去。',
   cloudMerged:n => '已經把這支裝置上的 ' + n + ' 首曲目加進雲端。',
   denied: [
     '這個按鈕現在不屬於你。',
@@ -2653,6 +2764,11 @@ const LINES_EN = {
   lockSide:   'This lock can’t be opened from this side.',
   nowOwner:   'The host left. You’re in charge now.',
   signInFail: 'Sign-in didn’t go through. Please try again.',
+  noSets:     'No setlists yet. Give one a name, like “Nov 21 gig”, then add songs.',
+  noSetName:  'A setlist needs a name, or you won’t find it on gig night.',
+  setDeleteAsk: name => 'Delete the setlist “' + name + '”? (The songs themselves stay.)',
+  setNoSongs: 'No songs yet. Save a few under “Songs” first',
+  setEmptyPlay:'This setlist is empty. Add some songs first.',
   cloudMerged:n => 'Added ' + n + (n === 1 ? ' song' : ' songs') + ' from this device to the cloud.',
   denied: [
     'This button isn’t yours right now.',
@@ -3695,9 +3811,20 @@ let songs = [];
 try { songs = JSON.parse(localStorage.getItem('mmSongs') || '[]'); } catch(e){ songs = []; }
 if (!Array.isArray(songs)) songs = [];
 
+// 每首曲目都有一個看不到的編號，歌單靠它指到曲目（曲名可能重複，不能拿來當編號）。
+// 舊曲目沒有編號，載入時補上。
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function ensureSongIds(list){
+  let changed = false;
+  for (const s of list) if (s && !s.id){ s.id = newId(); changed = true; }
+  return changed;
+}
+if (ensureSongIds(songs)) localStorage.setItem('mmSongs', JSON.stringify(songs));
+
 function saveSongs(){
   localStorage.setItem('mmSongs', JSON.stringify(songs));
   renderSongs();
+  renderSets();          // 歌單裡的首數、總長度、加歌選單都跟著曲目變
   pushCloudSongs();      // 有登入就順便存到雲端（沒登入什麼都不做）
 }
 
@@ -3746,18 +3873,21 @@ function renderSongs(){
   });
 }
 
-function loadSong(idx){
-  if (!guard()) return;
+// setPos：從歌單切過來的話，帶上「歌單名稱、第幾首、共幾首」，全房都會看到
+function loadSong(idx, setPos){
+  if (!guard()) return false;
   const s = songs[idx];
-  if (!s) return;
+  if (!s) return false;
   send({ t:'song', bpm:clamp(s.bpm, BPM_MIN, BPM_MAX), beats:s.beats,
          accents:s.accents, sub:s.sub, ramp:s.ramp, mute:s.mute,
          // 預備拍是後來才加的；舊曲目沒有的話不送，房間維持現在的設定
-         ...(s.count ? { count:s.count } : {}) });
+         ...(s.count ? { count:s.count } : {}),
+         now: { title:s.name, ...(setPos || {}) } });
   // 把這首的速度和長度填回「耗時」的原曲欄位。沒存長度的就清空長度，免得留著上一首的數字
   //（origBpm 是短暫存在過的舊欄位，那一版把原曲速度跟曲目速度分開存）
   fillCalc(s.origBpm || s.bpm, s.len || 0);
   toast(UI.applied(s.name));
+  return true;
 }
 
 // 存曲目時速度要用哪一個：
@@ -3825,6 +3955,7 @@ $('songSave').onclick = async () => {
     }
 
     songs.push({
+      id: newId(),
       name,
       bpm, beats: st.beats, sub: st.sub,
       accents: st.accents.slice(),
@@ -3892,6 +4023,7 @@ $('songImport').onclick = () => {
     if (songs.some(x => x.name === s.name)) continue;   // 同名的不重複加
     // 舊版匯出的曲目可能帶著 unit（拍子單位），現在不用了，直接略過
     songs.push({
+      id: newId(),            // 匯入的一律給新編號，不沿用別人的，免得撞號
       name: String(s.name).slice(0, 30),
       bpm: clamp(Math.round(s.bpm) || 90, BPM_MIN, BPM_MAX),
       beats: Math.min(12, Math.max(1, Math.round(s.beats) || 4)),
@@ -3920,6 +4052,218 @@ $('songImport').onclick = () => {
   $('songBox').value = '';
   toast(added ? UI.added(added) : LINES.nothingNew);
 };
+
+/* ---------- 9a. 歌單（Set） ----------
+   把曲目排成「11/21 表演」這種清單。歌單裡存的是曲目的編號，不是複本：
+   曲目刪掉的話，歌單裡那一格會顯示「已刪除」，切歌時自動跳過。
+   打開一個歌單之後，共用區最上面出現切歌列，一鍵全房換下一首。
+   跟曲目一樣存在這支裝置，有登入的話也存到雲端。 */
+let sets = [];
+try { sets = JSON.parse(localStorage.getItem('mmSets') || '[]'); } catch(e){ sets = []; }
+if (!Array.isArray(sets)) sets = [];
+
+let activeSet = null;      // 正在用的歌單 { id, pos }：pos 是現在在第幾首（從 0 算）
+let editingSetId = null;   // 正在編輯的歌單
+
+const songById = id => songs.find(s => s.id === id);
+const songIndexById = id => songs.findIndex(s => s.id === id);
+
+function saveSets(){
+  localStorage.setItem('mmSets', JSON.stringify(sets));
+  renderSets();
+  pushCloudSongs();      // 曲目和歌單存在同一份雲端資料裡
+}
+
+// 歌單的首數與總長度（每首都有長度才算總長，不然寫不準）
+function setSummary(set){
+  const list = set.items.map(songById).filter(Boolean);
+  const total = list.every(s => s.len) && list.length ? list.reduce((a, s) => a + s.len, 0) : 0;
+  return UI.setInfo(list.length, total ? fmtTime(total) : '');
+}
+
+function renderSets(){
+  $('setCount').textContent = UI.setCount(sets.length);
+  const box = $('setList');
+  box.innerHTML = '';
+  if (!sets.length){
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.style.margin = '.2rem 0 0';
+    p.textContent = LINES.noSets;
+    box.appendChild(p);
+  }
+  for (const set of sets){
+    const row = document.createElement('div');
+    row.className = 'song' + (activeSet && activeSet.id === set.id ? ' on' : '');
+
+    const main = document.createElement('button');
+    main.className = 'song-main';
+    main.innerHTML = '<b></b><span></span>';
+    main.firstChild.textContent = set.name;
+    main.lastChild.textContent = setSummary(set);
+    main.onclick = () => startSet(set.id);
+
+    const edit = document.createElement('button');
+    edit.className = 'song-side';
+    edit.textContent = '✎';
+    edit.setAttribute('aria-label', UI.setEditAria(set.name));
+    edit.onclick = () => { editingSetId = editingSetId === set.id ? null : set.id; renderSets(); };
+
+    const del = document.createElement('button');
+    del.className = 'song-side';
+    del.textContent = '×';
+    del.setAttribute('aria-label', UI.remove);
+    del.onclick = async () => {
+      const yes = await ask(LINES.setDeleteAsk(set.name), [
+        { label: UI.yes, value: true }, { label: UI.no, value: false },
+      ]);
+      if (!yes) return;
+      sets = sets.filter(x => x.id !== set.id);
+      if (activeSet && activeSet.id === set.id) closeSet();
+      if (editingSetId === set.id) editingSetId = null;
+      saveSets();
+    };
+
+    row.append(main, edit, del);
+    box.appendChild(row);
+  }
+  renderSetEdit();
+  renderSetBar();
+}
+
+function renderSetEdit(){
+  const set = sets.find(x => x.id === editingSetId);
+  $('setEdit').hidden = !set;
+  if (!set) return;
+  $('setEditName').textContent = set.name;
+  const box = $('setItems');
+  box.innerHTML = '';
+  if (!set.items.length){
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.style.margin = '.2rem 0 0';
+    p.textContent = UI.setEmpty;
+    box.appendChild(p);
+  }
+  set.items.forEach((id, i) => {
+    const s = songById(id);
+    const row = document.createElement('div');
+    row.className = 'song';
+
+    const main = document.createElement('div');
+    main.className = 'song-main set-item';
+    main.innerHTML = '<b></b><span></span>';
+    main.firstChild.textContent = (i + 1) + '. ' + (s ? s.name : UI.setMissing);
+    main.lastChild.textContent = s ? UI.songInfo(s.bpm, s.beats) + (s.len ? UI.songLen(fmtTime(s.len)) : '') : '';
+
+    const up = document.createElement('button');
+    up.className = 'song-side';
+    up.textContent = '↑';
+    up.setAttribute('aria-label', UI.moveUp);
+    up.onclick = () => {
+      if (i === 0) return;
+      [set.items[i-1], set.items[i]] = [set.items[i], set.items[i-1]];
+      saveSets();
+    };
+
+    const del = document.createElement('button');
+    del.className = 'song-side';
+    del.textContent = '×';
+    del.setAttribute('aria-label', UI.remove);
+    del.onclick = () => { set.items.splice(i, 1); saveSets(); };
+
+    row.append(main, up, del);
+    box.appendChild(row);
+  });
+  // 加歌的下拉選單：列出所有曲目（同一首可以加兩次，例如安可再唱一次）
+  const sel = $('setAddSel');
+  sel.innerHTML = '';
+  const ph = document.createElement('option');
+  ph.value = ''; ph.textContent = songs.length ? UI.setAddPh : LINES.setNoSongs;
+  sel.appendChild(ph);
+  for (const s of songs){
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.name + '（' + s.bpm + ' BPM）';
+    sel.appendChild(o);
+  }
+}
+
+$('setNew').onclick = () => {
+  const name = $('setName').value.trim();
+  if (!name){ toast(LINES.noSetName); return; }
+  const set = { id: newId(), name: name.slice(0, 30), items: [] };
+  sets.push(set);
+  editingSetId = set.id;          // 建好直接進入編輯，接著加歌
+  $('setName').value = '';
+  saveSets();
+};
+$('setName').addEventListener('keydown', e => { if (e.key === 'Enter') $('setNew').click(); });
+$('setAdd').onclick = () => {
+  const set = sets.find(x => x.id === editingSetId);
+  const id = $('setAddSel').value;
+  if (!set || !id) return;
+  set.items.push(id);
+  saveSets();
+};
+$('setEditDone').onclick = () => { editingSetId = null; renderSets(); };
+
+// ---- 切歌 ----
+// 從 pos 往 dir 方向找下一首還存在的曲目（被刪掉的跳過）；找不到回傳 -1
+function findPlayable(set, pos, dir){
+  for (let i = pos; i >= 0 && i < set.items.length; i += dir) if (songById(set.items[i])) return i;
+  return -1;
+}
+
+function playSetAt(set, pos){
+  const idx = songIndexById(set.items[pos]);
+  if (idx < 0) return;
+  const total = set.items.length;
+  // 送出成功（沒被鎖擋下）才算真的換到這一首
+  if (loadSong(idx, { set: set.name, pos: pos + 1, total })){
+    activeSet = { id: set.id, pos };
+    renderSets();
+  }
+}
+
+function startSet(id){
+  const set = sets.find(x => x.id === id);
+  if (!set) return;
+  const first = findPlayable(set, 0, 1);
+  if (first < 0){ toast(LINES.setEmptyPlay); editingSetId = id; renderSets(); return; }
+  playSetAt(set, first);
+}
+
+function stepSet(dir){
+  const set = activeSet && sets.find(x => x.id === activeSet.id);
+  if (!set) return closeSet();
+  const pos = findPlayable(set, activeSet.pos + dir, dir);
+  if (pos < 0) return;
+  playSetAt(set, pos);
+}
+
+function closeSet(){
+  activeSet = null;
+  renderSetBar();
+  for (const r of $('setList').children) r.classList.remove('on');
+}
+
+function renderSetBar(){
+  const set = activeSet && sets.find(x => x.id === activeSet.id);
+  $('setBar').hidden = !set;
+  if (!set) return;
+  const s = songById(set.items[activeSet.pos]);
+  $('setBarName').textContent = UI.setBarPos(set.name, activeSet.pos + 1, set.items.length);
+  $('setBarSong').textContent = s ? s.name : UI.setMissing;
+  const hasPrev = findPlayable(set, activeSet.pos - 1, -1) >= 0;
+  const hasNext = findPlayable(set, activeSet.pos + 1, 1) >= 0;
+  $('setPrev').disabled = !hasPrev;
+  $('setNext').disabled = !hasNext;
+  $('setNext').textContent = hasNext ? UI.setNext : UI.setLast;
+}
+
+$('setPrev').onclick  = () => stepSet(-1);
+$('setNext').onclick  = () => stepSet(1);
+$('setClose').onclick = () => closeSet();
 
 /* ---------- 9b. Google 帳號與雲端曲目 ----------
    用 Firebase：Google 登入＋Firestore 資料庫。每個人一份文件 users/{uid}，裡面是 songs 陣列。
@@ -4043,17 +4387,44 @@ $('signOutBtn').onclick = () => {
   if (fbAuth) fbAuth.signOut();
 };
 
-// 雲端和這支裝置的曲目合併：雲端的全部保留，這支裝置上有、雲端沒有的（依曲名比對）加在後面
+// 雲端和這支裝置的曲目合併：雲端的全部保留，這支裝置上有、雲端沒有的（依曲名比對）加在後面。
+// 同名的以雲端為準；這支裝置上那首的編號記在 idMap，歌單裡指到它的要改指雲端那首。
 function mergeSongs(cloudList, localList){
   const out = cloudList.slice();
-  for (const s of localList) if (!out.some(x => x.name === s.name)) out.push(s);
+  const idMap = {};
+  for (const s of localList){
+    const same = out.find(x => x.name === s.name);
+    if (!same) out.push(s);
+    else if (s.id && same.id && s.id !== same.id) idMap[s.id] = same.id;
+  }
+  return { list: out, idMap };
+}
+
+// 歌單合併：雲端的全部保留，這支裝置上有、雲端沒有的（依編號比對）加在後面
+function mergeSets(cloudSets, localSets, idMap){
+  const out = cloudSets.slice();
+  for (const s of localSets){
+    if (out.some(x => x.id === s.id)) continue;
+    out.push({ ...s, items: s.items.map(id => idMap[id] || id) });
+  }
   return out;
 }
 
-function setSongsFromCloud(list){
-  songs = list;
+// 雲端傳來的歌單可能缺欄位（別的版本存的），整理成一定有 id、name、items
+function cleanSets(list){
+  return (Array.isArray(list) ? list : [])
+    .filter(s => s && typeof s.name === 'string')
+    .map(s => ({ id: s.id || newId(), name: s.name.slice(0, 30),
+                 items: Array.isArray(s.items) ? s.items.filter(x => typeof x === 'string') : [] }));
+}
+
+function setLibraryFromCloud(songList, setList){
+  songs = songList;
+  sets = setList;
   localStorage.setItem('mmSongs', JSON.stringify(songs));   // 本機也留一份，沒網路時照樣看得到
+  localStorage.setItem('mmSets', JSON.stringify(sets));
   renderSongs();
+  renderSets();
 }
 
 function startCloudSync(u){
@@ -4066,19 +4437,28 @@ function startCloudSync(u){
     if (snap.metadata.hasPendingWrites) return;          // 自己剛寫出去的，不用再套一次
     const data = snap.exists ? snap.data() : null;
     const cloud = data && Array.isArray(data.songs) ? data.songs : [];
+    const cloudSets = cleanSets(data && data.sets);
+    // 早一點的版本存上雲端的曲目沒有編號，這裡補上（補了就要寫回雲端）
+    const idsAdded = ensureSongIds(cloud);
     if (!cloudReady){
       // 第一份雲端資料：跟這支裝置上的合併
       cloudReady = true;
-      const merged = mergeSongs(cloud, songs);
-      const added = merged.length - cloud.length;
-      setSongsFromCloud(merged);
+      const { list, idMap } = mergeSongs(cloud, songs);
+      const mergedSets = mergeSets(cloudSets, sets, idMap);
+      const added = list.length - cloud.length;
+      const setsAdded = mergedSets.length - cloudSets.length;
+      setLibraryFromCloud(list, mergedSets);
       cloudState = 'on';
       renderCloudState();
-      if (added > 0){ pushCloudSongs(true); toast(LINES.cloudMerged(added)); }
+      if (added > 0 || setsAdded > 0 || idsAdded) pushCloudSongs(true);
+      if (added > 0) toast(LINES.cloudMerged(added));
       return;
     }
-    // 之後：別的裝置改了曲目
-    if (JSON.stringify(cloud) !== JSON.stringify(songs)) setSongsFromCloud(cloud);
+    // 之後：別的裝置改了曲目或歌單
+    if (JSON.stringify(cloud) !== JSON.stringify(songs) || JSON.stringify(cloudSets) !== JSON.stringify(sets)){
+      setLibraryFromCloud(cloud, cloudSets);
+      if (idsAdded) pushCloudSongs(true);
+    }
     cloudState = 'on';
     renderCloudState();
   }, () => {
@@ -4103,6 +4483,7 @@ function pushCloudSongs(now){
   cloudTimer = setTimeout(() => {
     fbDb.collection('users').doc(uid).set({
       songs: JSON.parse(JSON.stringify(songs)),          // 去掉 undefined，Firestore 不收
+      sets: JSON.parse(JSON.stringify(sets)),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     }, { merge: true }).then(() => {
       if (cloudState !== 'on'){ cloudState = 'on'; renderCloudState(); }
@@ -4292,6 +4673,10 @@ function onState(m){
 
   $('roomCode').firstChild.textContent = m.code;
   // 人數用「人形圖示＋數字」，頂部列才放得下返回鍵（英文的 12 people 太長）；完整說法給讀屏和滑鼠提示
+  // 現在是哪一首（有人套用曲目或用歌單切歌時才有）
+  const now = m.now;
+  $('nowSong').hidden = !now;
+  if (now) $('nowSong').textContent = now.set ? UI.nowSongInSet(now.title, now.set, now.pos, now.total) : UI.nowSong(now.title);
   $('peopleNum').textContent = m.people;
   $('people').setAttribute('aria-label', UI.people(m.people));
   $('people').title = UI.people(m.people);
@@ -4837,6 +5222,7 @@ renderRamp();
 renderMute();
 renderCount();
 renderSongs();
+renderSets();
 initCloud();          // 背景去抓 Firebase，抓到才顯示登入按鈕；不會擋住節拍器
 paintTempo(st.bpm, null);
 connect();

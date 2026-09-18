@@ -101,6 +101,18 @@ function cleanMute(m) {
   return { on: !!m.on, play, rest };
 }
 
+// 現在是哪一首：曲名，從歌單切過來的話再加上歌單名稱、第幾首、共幾首。
+// 只是顯示用的文字，長度截短、數字限範圍就好。
+function cleanNow(n) {
+  if (!n || typeof n !== 'object' || typeof n.title !== 'string' || !n.title.trim()) return null;
+  const out = { title: n.title.trim().slice(0, 30) };
+  const pos = intIn(n.pos, 1, 999), total = intIn(n.total, 1, 999);
+  if (typeof n.set === 'string' && n.set.trim() && pos !== null && total !== null && pos <= total) {
+    out.set = n.set.trim().slice(0, 30); out.pos = pos; out.total = total;
+  }
+  return out;
+}
+
 // 預備拍：開始前先數 bars 小節；loop 的話每個 phrase 小節的樂句前都重新數一次
 function cleanCount(c) {
   if (!c || typeof c !== 'object') return null;
@@ -143,6 +155,7 @@ function createRoom() {
     ramp: { on: false, bars: 4, step: 2, target: 160 },
     mute: { on: false, play: 3, rest: 1 },
     count: { on: false, bars: 1, loop: false, phrase: 4 },
+    now: null,
     locked: false,
     owner: null,
     running: false,
@@ -166,6 +179,7 @@ function stateOf(code) {
     ramp: r.ramp,
     mute: r.mute,
     count: r.count,
+    now: r.now,
     locked: r.locked,
     running: r.running,
     startAt: r.startAt,
@@ -326,6 +340,7 @@ wss.on('connection', (ws) => {
         if (m.ramp) { const rr = cleanRamp(m.ramp); if (rr) r.ramp = rr; }
         if (m.mute) { const mm = cleanMute(m.mute); if (mm) r.mute = mm; }
         if (m.count) { const cc = cleanCount(m.count); if (cc) r.count = cc; }
+        r.now = cleanNow(m.now);      // 現在是哪一首（全房顯示）；舊版前端沒送就清掉
         if (r.running) r.startAt = Date.now() + LEAD_MS;
         break;
       }
