@@ -2031,12 +2031,12 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         <textarea id="songBox" placeholder="匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。" data-i18n-ph="songBoxPh"></textarea>
       </details>
 
-      <!-- 歌單（Set）：把曲目排成「11/21 表演」這種清單，表演時一鍵切下一首 -->
+      <!-- 歌單（Set）：把曲目排成「11/3 生日演出」這種清單，表演時一鍵切下一首 -->
       <details id="setBox" open>
         <summary><span data-i18n="setsTitle">歌單</span> <b id="setCount">0 個</b></summary>
         <div class="songs" id="setList"></div>
         <div class="saverow">
-          <input id="setName" placeholder="歌單名稱，例如 11/21 表演" data-i18n-ph="setNamePh" maxlength="30" autocomplete="off">
+          <input id="setName" placeholder="歌單名稱，例如 11/3 生日演出" data-i18n-ph="setNamePh" maxlength="30" autocomplete="off">
           <button id="setNew" data-i18n="setNew">新增歌單</button>
         </div>
         <!-- 編輯某一個歌單 -->
@@ -2556,7 +2556,7 @@ const UI_ZH = {
   // 歌單
   setsTitle:   '歌單',
   setCount:    n => n + ' 個',
-  setNamePh:   '歌單名稱，例如 11/21 表演',
+  setNamePh:   '歌單名稱，例如 11/3 生日演出',
   setNew:      '新增歌單',
   setEditDone: '完成',
   setAdd:      '加入',
@@ -2752,7 +2752,7 @@ const UI_EN = {
 
   setsTitle:   'Setlists',
   setCount:    n => n + (n === 1 ? ' list' : ' lists'),
-  setNamePh:   'Setlist name, e.g. Nov 21 gig',
+  setNamePh:   'Setlist name, e.g. Nov 3 birthday gig',
   setNew:      'New setlist',
   setEditDone: 'Done',
   setAdd:      'Add',
@@ -2807,7 +2807,7 @@ const LINES_ZH = {
   lockSide:   '鎖沒有辦法從這一側打開。',
   nowOwner:   '房主離開了，現在由你接手。',
   signInFail: '登入沒有成功，再試一次看看。',
-  noSets:     '還沒有歌單。取個名字，例如「11/21 表演」，再把曲目加進去。',
+  noSets:     '還沒有歌單。取個名字，例如「11/3 生日演出」，再把曲目加進去。',
   noSetName:  '歌單也要有名字，不然表演那天會找不到。',
   setDeleteAsk: name => '要刪除歌單「' + name + '」嗎？（裡面的曲目不會被刪掉）',
   setNoSongs: '還沒有曲目，先到「曲目」存幾首',
@@ -2858,7 +2858,7 @@ const LINES_EN = {
   lockSide:   'This lock can’t be opened from this side.',
   nowOwner:   'The host left. You’re in charge now.',
   signInFail: 'Sign-in didn’t go through. Please try again.',
-  noSets:     'No setlists yet. Give one a name, like “Nov 21 gig”, then add songs.',
+  noSets:     'No setlists yet. Give one a name, like “Nov 3 birthday gig”, then add songs.',
   noSetName:  'A setlist needs a name, or you won’t find it on gig night.',
   setDeleteAsk: name => 'Delete the setlist “' + name + '”? (The songs themselves stay.)',
   setNoSongs: 'No songs yet. Save a few under “Songs” first',
@@ -4151,7 +4151,7 @@ $('songImport').onclick = () => {
 };
 
 /* ---------- 9a. 歌單（Set） ----------
-   把曲目排成「11/21 表演」這種清單。歌單裡存的是曲目的編號，不是複本：
+   把曲目排成「11/3 生日演出」這種清單。歌單裡存的是曲目的編號，不是複本：
    曲目刪掉的話，歌單裡那一格會顯示「已刪除」，切歌時自動跳過。
    打開一個歌單之後，共用區最上面出現切歌列，一鍵全房換下一首。
    跟曲目一樣存在這支裝置，有登入的話也存到雲端。 */
