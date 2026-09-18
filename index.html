@@ -146,6 +146,23 @@ html[lang="en"] #room .roomcode .role::before{display:none}
 #room details label.setrow span{flex:1;min-width:0}
 /* 英文版的標題本身就是 Sync Metronome，上方那行小字會重複 */
 html[lang="en"] .mark::before{display:none}
+/* 首頁的 Google 帳號區 */
+.account{display:flex;flex-direction:column;align-items:center;gap:.5rem;margin-top:-.6rem}
+.account[hidden],.account [hidden]{display:none !important}
+.gbtn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;width:auto;
+  padding:.7rem 1.3rem;font-size:.95rem}
+.gbtn svg{width:1.2rem;height:1.2rem;flex:0 0 auto}
+.acct{display:flex;align-items:center;gap:.7rem;padding:.5rem .8rem;border-radius:999px;
+  border:1px solid var(--line);background:color-mix(in srgb, var(--card-soft) 80%, transparent);max-width:100%}
+.acct img{width:2rem;height:2rem;border-radius:50%;flex:0 0 auto;object-fit:cover}
+.acct-who{display:flex;flex-direction:column;min-width:0;text-align:left;line-height:1.25}
+.acct-who b{font-size:.9rem;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct-who small{font-size:.72rem;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acct .btn-link{flex:0 0 auto;margin:0;font-size:.8rem}
+.account .hint{margin:0;max-width:22rem}
+/* 曲目面板裡的雲端同步狀態 */
+#room details .cloud-state{margin-top:.6rem}
+#room details .cloud-state.err{color:var(--alert) !important}
 /* 外觀和語言兩組選擇靠近一點，看起來是同一區 */
 #gate .modepick + .modepick{margin-top:-1.3rem}
 /* 重音提示列：左邊說明，右邊「全部取消」 */
@@ -1675,6 +1692,20 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
       <button class="modebtn" id="langEn" lang="en">English</button>
     </div>
 
+    <!-- Google 帳號：登入後曲目存在雲端。Firebase 還沒載入（或連不上）時整區隱藏，節拍器照常能用 -->
+    <div id="accountArea" class="account" hidden>
+      <button id="signInBtn" class="btn btn-quiet gbtn">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        <span data-i18n="signIn">用 Google 登入</span>
+      </button>
+      <div id="accountBox" class="acct" hidden>
+        <img id="acctPhoto" alt="" referrerpolicy="no-referrer">
+        <div class="acct-who"><b id="acctName"></b><small id="acctMail"></small></div>
+        <button id="signOutBtn" class="btn-link" data-i18n="signOut">登出</button>
+      </div>
+      <p class="hint" id="accountHint" data-i18n="cloudHint">登入後，曲目會存在雲端，換手機、換電腦都看得到。</p>
+    </div>
+
     <div id="serverArea" style="display:none">
       <button class="btn-link" id="serverToggle" data-i18n="serverToggle">伺服器設定</button>
       <div id="serverBox" style="display:none">
@@ -1783,8 +1814,8 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         <input id="songName" placeholder="曲名" data-i18n-ph="songNamePh" maxlength="30" autocomplete="off">
         <button id="songSave" data-i18n="songSave">存下目前設定</button>
       </div>
-      <p class="hint" data-i18n="songHint1">曲目存在你自己這支裝置裡。點一首會把速度、拍數、重音、細分、
-        漸快設定一次套用到整個房間。</p>
+      <p class="hint cloud-state" id="songCloud"></p>
+      <p class="hint" data-i18n="songHint1">點一首會把速度、拍數、重音、細分、漸快、預備拍設定一次套用到整個房間。</p>
       <p class="hint" data-i18n="songHint2">存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。
         長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。</p>
       <!-- 文字放在 span 裡：英文版換字時只換 span，才不會把圖示一起蓋掉 -->
@@ -2284,7 +2315,7 @@ const UI_ZH = {
   songCount:   n => n + ' 首',
   songNamePh:  '曲名',
   songSave:    '存下目前設定',
-  songHint1:   '曲目存在你自己這支裝置裡。點一首會把速度、拍數、重音、細分、漸快設定一次套用到整個房間。',
+  songHint1:   '點一首會把速度、拍數、重音、細分、漸快、預備拍設定一次套用到整個房間。',
   songHint2:   '存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。',
   songInfo:    (bpm, beats) => bpm + ' BPM · 每小節 ' + beats + ' 拍',
   songLen:     t => ' · 全長 ' + t,
@@ -2361,6 +2392,15 @@ const UI_ZH = {
   latHint2:    '聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。長時間大音量會傷聽力，而且是不可逆的。',
 
   // 最下面
+  // 帳號與雲端
+  signIn:      '用 Google 登入',
+  signOut:     '登出',
+  cloudHint:   '登入後，曲目會存在雲端，換手機、換電腦都看得到。',
+  cloudOn:     mail => '☁ 曲目已同步到雲端（' + mail + '）',
+  cloudOff:    '曲目只存在這支裝置。回首頁用 Google 登入，就能存到雲端。',
+  cloudErr:    '雲端同步暫時失敗，曲目先存在這支裝置，之後會再試。',
+  cloudLoading:'正在讀取雲端的曲目…',
+
   share:       '複製邀請連結',
   shareDone:   '已複製',
   resetAudio:  '沒有聲音？重置音訊',
@@ -2446,7 +2486,7 @@ const UI_EN = {
   songCount:   n => n + (n === 1 ? ' song' : ' songs'),
   songNamePh:  'Song name',
   songSave:    'Save current settings',
-  songHint1:   'Songs are saved on this device. Tap one to apply its tempo, beats, accents, subdivision and speed trainer to the whole room.',
+  songHint1:   'Tap a song to apply its tempo, beats, accents, subdivision, speed trainer and count-in to the whole room.',
   songHint2:   'Tempo saved: the original tempo from “Duration” if filled in, otherwise the current tempo — you’ll be asked if they differ. The length comes from “Duration”, and tapping a song fills both back in.',
   songInfo:    (bpm, beats) => bpm + ' BPM · ' + beats + (beats === 1 ? ' beat' : ' beats') + ' per bar',
   songLen:     t => ' · ' + t,
@@ -2518,6 +2558,14 @@ const UI_EN = {
   latHint1:    'If you hear the beat later than everyone else, drag right until you line up. Wired headphones usually need nothing; Bluetooth is typically around 120–250. This only affects you.',
   latHint2:    'Can’t hear it? Try better-isolating headphones before turning the volume up. Long exposure to loud sound damages hearing permanently.',
 
+  signIn:      'Sign in with Google',
+  signOut:     'Sign out',
+  cloudHint:   'Sign in to keep your songs in the cloud, on every phone and computer.',
+  cloudOn:     mail => '☁ Songs synced to the cloud (' + mail + ')',
+  cloudOff:    'Songs are only on this device. Sign in with Google on the home screen to save them to the cloud.',
+  cloudErr:    'Cloud sync failed for now. Songs are kept on this device and will sync later.',
+  cloudLoading:'Loading your songs from the cloud…',
+
   share:       'Copy invite link',
   shareDone:   'Copied',
   resetAudio:  'No sound? Reset audio',
@@ -2536,6 +2584,8 @@ const LINES_ZH = {
   noRoom:     '你為什麼知道這間房號...',
   lockSide:   '鎖沒有辦法從這一側打開。',
   nowOwner:   '房主離開了，現在由你接手。',
+  signInFail: '登入沒有成功，再試一次看看。',
+  cloudMerged:n => '已經把這支裝置上的 ' + n + ' 首曲目加進雲端。',
   denied: [
     '這個按鈕現在不屬於你。',
     '你按到了，但是沒有用。',
@@ -2580,6 +2630,8 @@ const LINES_EN = {
   noRoom:     'How do you even know this room code...',
   lockSide:   'This lock can’t be opened from this side.',
   nowOwner:   'The host left. You’re in charge now.',
+  signInFail: 'Sign-in didn’t go through. Please try again.',
+  cloudMerged:n => 'Added ' + n + (n === 1 ? ' song' : ' songs') + ' from this device to the cloud.',
   denied: [
     'This button isn’t yours right now.',
     'You pressed it. Nothing happened.',
@@ -3624,6 +3676,7 @@ if (!Array.isArray(songs)) songs = [];
 function saveSongs(){
   localStorage.setItem('mmSongs', JSON.stringify(songs));
   renderSongs();
+  pushCloudSongs();      // 有登入就順便存到雲端（沒登入什麼都不做）
 }
 
 function renderSongs(){
@@ -3845,6 +3898,174 @@ $('songImport').onclick = () => {
   $('songBox').value = '';
   toast(added ? UI.added(added) : LINES.nothingNew);
 };
+
+/* ---------- 9b. Google 帳號與雲端曲目 ----------
+   用 Firebase：Google 登入＋Firestore 資料庫。每個人一份文件 users/{uid}，裡面是 songs 陣列。
+   - Firebase 的程式在網頁載入後才去抓；抓不到（沒網路、被擋）就整個帳號區隱藏，節拍器照常能用
+   - 第一次登入：這支裝置上的曲目合併進雲端（同名的以雲端為準）
+   - 之後存、刪、排順序都會自動存到雲端；別的裝置改了會即時更新到這邊
+   - 登出後曲目留在這支裝置上，不會消失
+   資料庫的安全規則在 Firebase 後台設定：每個人只能讀寫自己的 users/{uid}。
+   firebaseConfig 是公開的設定值（本來就會出現在網頁裡），不是密碼。 */
+const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyAegCskqEqP-I88Bmtmjk5H23VoecD-h6c',
+  authDomain: 'band-metronome.firebaseapp.com',
+  projectId: 'band-metronome',
+  storageBucket: 'band-metronome.firebasestorage.app',
+  messagingSenderId: '352956902425',
+  appId: '1:352956902425:web:01bb4ade2dfdf653a68e88',
+};
+const FIREBASE_VERSION = '10.12.2';
+
+let fbAuth = null, fbDb = null;
+let user = null;              // 目前登入的 Firebase 使用者；沒登入是 null
+let cloudUnsub = null;        // 停止監聽雲端文件
+let cloudReady = false;       // 已經拿到第一份雲端資料、合併完了
+let cloudState = 'off';       // off／loading／on／error
+let cloudTimer = null;
+
+function loadScript(src){
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.async = false;
+    s.onload = resolve; s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
+async function initCloud(){
+  // 包成 app（Capacitor）時網頁的彈出式登入不能用，之後要換成原生登入，先不顯示
+  if (window.Capacitor) return;
+  try {
+    for (const name of ['app', 'auth', 'firestore'])
+      await loadScript('https://www.gstatic.com/firebasejs/' + FIREBASE_VERSION + '/firebase-' + name + '-compat.js');
+    firebase.initializeApp(FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+  } catch(e){
+    return;                   // 抓不到 Firebase：帳號區維持隱藏
+  }
+  $('accountArea').hidden = false;
+  fbAuth.getRedirectResult().catch(() => {});       // 用轉址登入回來時把結果收下
+  fbAuth.onAuthStateChanged(u => {
+    user = u;
+    renderAccount();
+    if (u) startCloudSync(u); else stopCloudSync();
+  });
+}
+
+function renderAccount(){
+  $('signInBtn').hidden = !!user;
+  $('accountBox').hidden = !user;
+  $('accountHint').hidden = !!user;
+  if (user){
+    $('acctName').textContent = user.displayName || '';
+    $('acctMail').textContent = user.email || '';
+    const photo = $('acctPhoto');
+    if (user.photoURL){ photo.src = user.photoURL; photo.hidden = false; } else photo.hidden = true;
+  }
+  renderCloudState();
+}
+
+function renderCloudState(){
+  const el = $('songCloud');
+  el.classList.toggle('err', cloudState === 'error');
+  el.textContent = !user ? UI.cloudOff
+    : cloudState === 'loading' ? UI.cloudLoading
+    : cloudState === 'error' ? UI.cloudErr
+    : UI.cloudOn(user.email || '');
+}
+
+$('signInBtn').onclick = () => {
+  if (!fbAuth) return;
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  fbAuth.signInWithPopup(provider).catch(e => {
+    const code = e && e.code;
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
+    // 彈出視窗被擋掉的話改用整頁轉址登入
+    if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
+      fbAuth.signInWithRedirect(provider).catch(() => showError(LINES.signInFail, true));
+      return;
+    }
+    showError(LINES.signInFail, true);
+  });
+};
+
+$('signOutBtn').onclick = () => {
+  stopCloudSync();
+  if (fbAuth) fbAuth.signOut();
+};
+
+// 雲端和這支裝置的曲目合併：雲端的全部保留，這支裝置上有、雲端沒有的（依曲名比對）加在後面
+function mergeSongs(cloudList, localList){
+  const out = cloudList.slice();
+  for (const s of localList) if (!out.some(x => x.name === s.name)) out.push(s);
+  return out;
+}
+
+function setSongsFromCloud(list){
+  songs = list;
+  localStorage.setItem('mmSongs', JSON.stringify(songs));   // 本機也留一份，沒網路時照樣看得到
+  renderSongs();
+}
+
+function startCloudSync(u){
+  stopCloudSync();
+  cloudReady = false;
+  cloudState = 'loading';
+  renderCloudState();
+  const doc = fbDb.collection('users').doc(u.uid);
+  cloudUnsub = doc.onSnapshot(snap => {
+    if (snap.metadata.hasPendingWrites) return;          // 自己剛寫出去的，不用再套一次
+    const data = snap.exists ? snap.data() : null;
+    const cloud = data && Array.isArray(data.songs) ? data.songs : [];
+    if (!cloudReady){
+      // 第一份雲端資料：跟這支裝置上的合併
+      cloudReady = true;
+      const merged = mergeSongs(cloud, songs);
+      const added = merged.length - cloud.length;
+      setSongsFromCloud(merged);
+      cloudState = 'on';
+      renderCloudState();
+      if (added > 0){ pushCloudSongs(true); toast(LINES.cloudMerged(added)); }
+      return;
+    }
+    // 之後：別的裝置改了曲目
+    if (JSON.stringify(cloud) !== JSON.stringify(songs)) setSongsFromCloud(cloud);
+    cloudState = 'on';
+    renderCloudState();
+  }, () => {
+    cloudState = 'error';
+    renderCloudState();
+  });
+}
+
+function stopCloudSync(){
+  if (cloudUnsub){ cloudUnsub(); cloudUnsub = null; }
+  clearTimeout(cloudTimer);
+  cloudReady = false;
+  cloudState = 'off';
+  renderCloudState();
+}
+
+// 存到雲端。連續操作（例如一直按往上移）只在停手後存一次
+function pushCloudSongs(now){
+  if (!user || !cloudReady || !fbDb) return;
+  clearTimeout(cloudTimer);
+  const uid = user.uid;
+  cloudTimer = setTimeout(() => {
+    fbDb.collection('users').doc(uid).set({
+      songs: JSON.parse(JSON.stringify(songs)),          // 去掉 undefined，Firestore 不收
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true }).then(() => {
+      if (cloudState !== 'on'){ cloudState = 'on'; renderCloudState(); }
+    }).catch(() => {
+      cloudState = 'error';
+      renderCloudState();
+    });
+  }, now ? 0 : 800);
+}
 
 /* ---------- 10. 漸快訓練 ---------- */
 
@@ -4570,6 +4791,7 @@ renderRamp();
 renderMute();
 renderCount();
 renderSongs();
+initCloud();          // 背景去抓 Firebase，抓到才顯示登入按鈕；不會擋住節拍器
 paintTempo(st.bpm, null);
 connect();
 
