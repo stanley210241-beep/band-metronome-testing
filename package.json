@@ -1,0 +1,15 @@
+{
+  "name": "band-metronome",
+  "version": "1.0.0",
+  "description": "同步節拍器 — 同一個房間的成員，耳機裡聽到同一拍",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

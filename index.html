@@ -1,0 +1,4585 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#F9FAFB">
+<title>同步節拍器</title>
+<link rel="manifest" href="/manifest.json">
+<!-- 換圖示時把 v= 的數字加一：手機會快取圖示，網址不變就一直拿舊的（server.js 的 manifest 也要一起改） -->
+<link rel="apple-touch-icon" href="/icon.png?v=2">
+<!-- 瀏覽器分頁上的小圖示，跟主畫面圖示同一張 -->
+<link rel="icon" type="image/png" href="/icon.png?v=2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<!-- iPhone「加入主畫面」預設的名稱。中英文版都用同一個 -->
+<meta name="apple-mobile-web-app-title" content="Sync Metronome">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400;12..96,75..100,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#141B22; --ink-2:#1C2630; --ink-3:#26323E; --line:#2C3947;
+  --paper:#E9E3D6; --mute:#8393A2; --brass:#D8A23A; --alert:#E0714F;
+  --ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans TC",
+        "PingFang TC", "Microsoft JhengHei", sans-serif;
+  --display: "Bricolage Grotesque", var(--ui);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{margin:0;background:var(--ink);color:var(--paper);font-family:var(--ui);
+  font-size:16px;line-height:1.5;overscroll-behavior:none;-webkit-user-select:none;user-select:none}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px;border-radius:4px}
+input[type=checkbox]{accent-color:var(--brass);width:1.05rem;height:1.05rem}
+
+.wrap{min-height:100%;display:flex;flex-direction:column;max-width:30rem;margin:0 auto;
+  padding:max(.9rem,env(safe-area-inset-top)) 1.1rem max(1.1rem,env(safe-area-inset-bottom))}
+.screen{display:none;flex:1;flex-direction:column}
+.screen.on{display:flex}
+
+/* ---------- 加入畫面 ---------- */
+#gate{justify-content:center;gap:2rem;text-align:center}
+.mark{font-family:var(--display);font-weight:700;font-size:clamp(2rem,9vw,2.75rem);
+  line-height:1.05;letter-spacing:-.02em;margin:0}
+.mark span{display:block;font-size:.9rem;font-weight:400;font-family:var(--ui);
+  letter-spacing:.02em;color:var(--mute);margin-top:.6rem;line-height:1.5}
+#code{width:100%;text-align:center;font-family:var(--display);font-weight:700;
+  font-size:clamp(2.5rem,14vw,3.5rem);letter-spacing:.18em;text-indent:.18em;
+  background:var(--ink-2);border:1px solid var(--line);border-radius:14px;
+  padding:.7rem .5rem;color:var(--paper)}
+#code::placeholder{color:#3C4B5B}
+#code:focus{outline:none;border-color:var(--brass)}
+
+.btn{display:block;width:100%;border-radius:14px;padding:1rem;font-weight:600;
+  text-align:center;transition:transform .08s ease,background .15s ease}
+.btn:active{transform:scale(.985)}
+.btn-solid{background:var(--brass);color:#1A1206}
+.btn-quiet{background:var(--ink-2);border:1px solid var(--line);color:var(--paper)}
+.btn-link{color:var(--mute);padding:.45rem;font-size:.88rem;text-decoration:underline;
+  text-underline-offset:3px;width:auto;margin:0 auto}
+.stack{display:flex;flex-direction:column;gap:.7rem}
+.err{color:var(--alert);font-size:.9rem;min-height:1.4em;margin:0}
+.err.hot{color:#FF5C5C;font-weight:600}
+
+/* ---------- 房間畫面 ---------- */
+#room{gap:.8rem}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.roomcode{font-family:var(--display);font-weight:700;font-size:1.25rem;
+  letter-spacing:.16em;color:var(--brass)}
+.roomcode small{display:block;font-family:var(--ui);font-weight:400;font-size:.7rem;
+  letter-spacing:.02em;color:var(--mute);line-height:1.3}
+.bar-right{display:flex;align-items:center;gap:.35rem}
+.chip{font-size:.72rem;color:var(--mute);border:1px solid var(--line);
+  border-radius:999px;padding:.2rem .5rem;white-space:nowrap}
+.chip.warn{color:var(--alert);border-color:var(--alert)}
+.chip.lit{color:var(--brass);border-color:var(--brass)}
+button.chip{cursor:pointer}
+button.chip.ro{color:var(--mute)}
+
+.tempo{text-align:center;line-height:1;margin-top:.1rem}
+.tempo-num{font-family:var(--display);font-weight:700;font-size:clamp(3.2rem,16vw,4.6rem);
+  font-variant-numeric:tabular-nums;letter-spacing:-.04em;display:block}
+.tempo-label{display:block;color:var(--mute);font-size:.78rem;margin-top:.3rem}
+/* 折疊面板裡的內容左右都要留邊。
+   原本的「details > *:not(summary)」優先權比 .hint 低，說明文字的左右留白被蓋掉，
+   直接貼到（甚至超出）卡片邊框；滑桿和匯出框是 100% 寬再加留白，會往右凸出去。 */
+#room details > .hint{margin-left:.9rem !important;margin-right:.9rem !important}
+#room details > input[type=range],
+#room details > textarea{display:block;box-sizing:border-box;
+  width:calc(100% - 1.8rem) !important;margin-left:.9rem !important;margin-right:.9rem !important}
+/* 房號左邊的返回鍵（離開房間）：沿用 .chip 的外觀，做成圓形 */
+.bar-left{display:flex;align-items:center;gap:.45rem;min-width:0}
+#room .chip.backbtn{width:1.9rem;height:1.9rem;padding:0;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;cursor:pointer}
+#room .chip.backbtn svg{width:1rem;height:1rem;display:block}
+/* 房號下面的身分標示：「房號 · 房主」／「房號 · 成員」，房主用主題色加小皇冠 */
+#room .roomcode small{white-space:nowrap}
+#room .roomcode .role{display:inline-flex;align-items:center;gap:.15rem}
+#room .roomcode .role::before{content:"·";margin:0 .3rem 0 .25rem;opacity:.6}
+#room .roomcode .role.owner{color:var(--brass) !important;font-weight:600}
+#room .roomcode .role svg{width:.85em;height:.85em;display:block}
+/* 英文是全大寫加字距，「ROOM · HOST」會比房號寬，把頂部列擠成兩行；英文版只留身分 */
+html[lang="en"] #room .roomcode small > span:first-child{display:none}
+html[lang="en"] #room .roomcode .role::before{display:none}
+/* 頂部列右邊的小按鈕收窄一點，加上返回鍵之後一排才放得下 */
+#room .bar-right .chip{padding-left:.45rem;padding-right:.45rem}
+#room #people{display:inline-flex;align-items:center;gap:.2rem;font-variant-numeric:tabular-nums}
+#room #people svg{width:.95em;height:.95em;display:block}
+/* 預備拍：沒開的時候「循環」那區變淡（還是可以點，點了會順便把預備拍打開） */
+#countLoopArea.dim{opacity:.5}
+/* 預備拍數到的那一格：虛線框，跟正在響的拍子、靜音小節都分得開 */
+#room .cell.count{border-style:dashed !important;
+  border-color:color-mix(in srgb, var(--brass) 70%, transparent) !important;
+  background:color-mix(in srgb, var(--brass) 14%, transparent) !important}
+/* 漸快、靜音訓練可以直接打的數字格：看起來像數字，但有淡淡外框提示可以點 */
+#room details .numin{box-sizing:border-box;width:2.4em;padding:.12rem 0;margin:0;
+  border:1px solid color-mix(in srgb, var(--line) 80%, transparent);border-radius:8px;
+  background:color-mix(in srgb, var(--card-soft) 70%, transparent);
+  font-family:var(--display);font-weight:700;text-align:center;font-variant-numeric:tabular-nums;
+  -webkit-appearance:none;appearance:none;outline:0;box-shadow:none;min-width:0}
+#room details .numin.setval{font-size:1.02rem}
+#room details .numin.val{font-size:.9rem;width:3.2em;min-width:0;flex:0 0 auto}  /* .volrow input 預設會撐滿，這格不要 */
+#room details .numin:focus{border-color:var(--brass);background:var(--card)}
+/* 耳機延遲：滑桿兩邊的 −／＋ */
+#room details > .latrow{display:flex;align-items:center;gap:.6rem;margin:.6rem .9rem 0 !important}
+#room details > .latrow input[type=range]{flex:1;min-width:0;width:auto;margin:0}
+/* 曲目的匯出／匯入：原本是純文字連結太不明顯，改成有外框的小按鈕，但比「存下目前設定」低調 */
+#room details .iorow{gap:.6rem;margin-top:.7rem}
+#room details .iorow .iobtn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:.4rem;
+  padding:.5rem .8rem;border-radius:10px;font-size:.85rem;background:transparent;
+  border:1px solid color-mix(in srgb, var(--brass) 35%, var(--line));
+  color:var(--on-card) !important;transition:background .15s ease, border-color .15s ease}
+#room details .iorow .iobtn:hover{background:color-mix(in srgb, var(--brass) 8%, transparent);
+  border-color:color-mix(in srgb, var(--brass) 60%, var(--line))}
+#room details .iorow .iobtn:active{background:color-mix(in srgb, var(--brass) 14%, transparent)}
+#room details .iorow .iobtn svg{width:1rem;height:1rem;flex:0 0 auto;color:var(--brass)}
+#room details .iorow .iobtn span{color:inherit !important}
+/* 折疊面板裡的設定列：間距收一點，一般手機上一行放得下；
+   真的放不下（窄螢幕、英文）就整組換行——「按鈕、數字、單位」包在 .grp 裡不拆開 */
+#room details .setrow{flex-wrap:wrap;column-gap:.3rem;row-gap:.45rem}
+#room details .setrow .grp{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}
+/* 勾選框那種列不要整組換行：勾選框留在左邊，太長的文字自己折行 */
+#room details label.setrow{flex-wrap:nowrap;align-items:flex-start}
+#room details label.setrow input[type=checkbox]{flex:0 0 auto;margin-top:.15rem}
+#room details label.setrow span{flex:1;min-width:0}
+/* 英文版的標題本身就是 Sync Metronome，上方那行小字會重複 */
+html[lang="en"] .mark::before{display:none}
+/* 外觀和語言兩組選擇靠近一點，看起來是同一區 */
+#gate .modepick + .modepick{margin-top:-1.3rem}
+/* 重音提示列：左邊說明，右邊「全部取消」 */
+.accrow{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.accrow .btn-link{flex:0 0 auto;margin:0;padding:.2rem 0;font-size:.74rem;white-space:nowrap}
+/* 耗時計算 */
+.saverow.calcrow{align-items:center;margin-top:.45rem}
+.saverow.calcrow > span{flex:0 0 auto;font-size:.8rem;color:var(--mute)}
+.saverow.calcrow input{flex:0 1 4.2rem;width:4.2rem;text-align:center;font-variant-numeric:tabular-nums}
+.calc-out{margin:.7rem .9rem .2rem;font-size:.9rem;line-height:1.6}
+.calc-out b{font-size:1.25rem;font-variant-numeric:tabular-nums}
+#tapBtn{margin-left:auto;min-width:4.2rem;justify-content:center;font-weight:600;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none}
+#tapBtn.hit{transform:scale(.94)}
+/* 點大數字可以直接輸入速度 */
+#bpmNum{cursor:text}
+.tempo-input{width:100%;margin:0 auto;padding:0;border:0;outline:0;background:transparent;
+  text-align:center;font-family:var(--display);font-weight:700;color:inherit;
+  caret-color:var(--brass);box-shadow:none;border-radius:0;-webkit-appearance:none;appearance:none}
+
+/* 拍子顯示列，同時就是重音編輯器 */
+.beatrow{display:flex;gap:3px}
+.cell{position:relative;flex:1;min-width:0;height:56px;border-radius:8px;
+  background:var(--ink-2);border:1px solid var(--line);overflow:hidden;
+  display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;
+  font-size:.68rem;color:var(--mute);font-variant-numeric:tabular-nums;
+  transition:background .1s linear,color .1s linear}
+.cell::before{content:"";position:absolute;left:0;right:0;top:0;height:0;
+  background:var(--brass);transition:height .12s ease}
+.cell.acc::before{height:6px}
+.cell.acc{color:var(--brass)}
+.cell.now{background:var(--paper);color:var(--ink)}
+.cell.now.acc{background:var(--brass);color:#1A1206}
+
+.setrow{display:flex;align-items:center;gap:.45rem;font-size:.82rem;color:var(--mute)}
+.mini{width:2rem;height:2rem;border-radius:9px;background:var(--ink-2);
+  border:1px solid var(--line);font-size:1.05rem;line-height:1;color:var(--paper);
+  display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.mini:active{background:var(--ink-3)}
+.setval{font-family:var(--display);font-weight:700;font-size:1.1rem;color:var(--paper);
+  min-width:1.4rem;text-align:center;font-variant-numeric:tabular-nums}
+.unitbtn{display:flex;align-items:center;gap:.3rem;height:2rem;padding:0 .6rem;
+  border-radius:9px;background:var(--ink-2);border:1px solid var(--line);
+  color:var(--paper);font-size:.8rem;white-space:nowrap}
+.unitbtn:active{background:var(--ink-3)}
+
+.chips{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.chips::-webkit-scrollbar{display:none}
+.subchip{flex:1 0 auto;padding:.5rem .1rem;border-radius:9px;font-size:.72rem;
+  background:var(--ink-2);border:1px solid var(--line);color:var(--mute);
+  text-align:center;min-width:2.5rem}
+.subchip.on{background:var(--ink-3);border-color:var(--brass);color:var(--brass);font-weight:600}
+/* 細分按鈕畫成音符：七顆要擠在手機一排裡，音符多的那幾顆自己縮小 */
+#subRow{gap:4px}
+#subRow .subchip{flex:1 1 0;min-width:0;padding-left:.1rem;padding-right:.1rem}
+.subchip svg.subnote{display:block;margin:0 auto;width:auto;height:2.35rem;max-width:100%}
+.chip svg.spk{height:1.35em;width:auto;display:block}
+#muteBtn{padding-top:.18rem;padding-bottom:.18rem}
+
+.rowctl{display:flex;align-items:center;gap:.6rem}
+.step{flex:0 0 3.2rem;height:3.2rem;border-radius:13px;background:var(--ink-2);
+  border:1px solid var(--line);font-size:1.45rem;line-height:1}
+.step:active{background:var(--ink-3)}
+.slider-wrap{flex:1}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;
+  background:transparent;margin:0;padding:.75rem 0;display:block}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:var(--line);border-radius:2px}
+input[type=range]::-moz-range-track{height:3px;background:var(--line);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;
+  border-radius:50%;background:var(--paper);margin-top:-11.5px;border:0}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--paper);border:0}
+
+.volrow{display:flex;align-items:center;gap:.6rem;font-size:.78rem;color:var(--mute)}
+.volrow input{flex:1}
+.volrow .val{min-width:2.6rem;text-align:right;font-variant-numeric:tabular-nums}
+.volrow .val.hot{color:var(--alert)}
+
+#play{font-size:1.05rem;padding:1.05rem}
+#play.on{background:var(--paper);color:var(--ink)}
+
+/* 控制權被鎖住時，共用控制項整區變暗且點不動 */
+#shared{display:flex;flex-direction:column;gap:.8rem;transition:opacity .15s ease}
+#shared.off{opacity:.4}
+#shared.off *{cursor:default}
+
+details{border-top:1px solid var(--line);padding-top:.65rem}
+summary{list-style:none;color:var(--mute);font-size:.82rem;
+  display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+summary::-webkit-details-marker{display:none}
+summary b{color:var(--paper);font-weight:600;font-variant-numeric:tabular-nums}
+.hint{color:var(--mute);font-size:.78rem;line-height:1.6;margin:.55rem 0 0}
+
+/* 曲目清單 */
+.songs{display:flex;flex-direction:column;gap:5px;margin-top:.6rem}
+.song{display:flex;align-items:stretch;gap:5px}
+.song-main{flex:1;min-width:0;text-align:left;background:var(--ink-2);
+  border:1px solid var(--line);border-radius:10px;padding:.5rem .65rem}
+.song-main b{display:block;font-weight:600;font-size:.9rem;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.song-main span{display:block;font-size:.72rem;color:var(--mute);margin-top:.1rem}
+.song-side{width:2.1rem;border-radius:10px;background:var(--ink-2);
+  border:1px solid var(--line);color:var(--mute);font-size:.9rem}
+.song-side:active{background:var(--ink-3)}
+.saverow{display:flex;gap:5px;margin-top:.6rem}
+.saverow input{flex:1;min-width:0;background:var(--ink-2);border:1px solid var(--line);
+  border-radius:10px;padding:.55rem .7rem;font-size:.88rem;color:var(--paper)}
+.saverow input:focus{outline:none;border-color:var(--brass)}
+.saverow button{flex:0 0 auto;padding:0 .9rem;border-radius:10px;
+  background:var(--ink-3);border:1px solid var(--line);font-size:.85rem}
+#songBox{width:100%;height:4.5rem;margin-top:.6rem;background:var(--ink-2);
+  border:1px solid var(--line);border-radius:10px;padding:.5rem;font-size:.7rem;
+  color:var(--mute);resize:none;-webkit-user-select:text;user-select:text}
+.linkrow{display:flex;gap:.9rem;justify-content:center;margin-top:.5rem}
+
+@media (prefers-reduced-motion: reduce){
+  .btn:active{transform:none}
+  .cell,.cell::before,#shared{transition:none}
+}
+
+
+/* =========================================================
+   Visual refresh — dark studio / brass console
+   保留原功能與 DOM，只覆蓋視覺層。
+   ========================================================= */
+:root{
+  --ink:#10171E;
+  --ink-2:#18222C;
+  --ink-3:#202C38;
+  --line:#31404F;
+  --line-soft:rgba(108,130,149,.18);
+  --paper:#F2EBDD;
+  --paper-2:#D8D0C1;
+  --mute:#8E9EAC;
+  --brass:#D9A43B;
+  --brass-2:#F0BD4F;
+  --alert:#E0714F;
+  --display:"Bricolage Grotesque",var(--ui);
+}
+
+html{background:var(--ink)}
+body{
+  min-height:100%;
+  background:
+    radial-gradient(circle at 50% -10%, rgba(217,164,59,.12), transparent 32%),
+    radial-gradient(circle at 12% 75%, rgba(83,112,137,.07), transparent 30%),
+    linear-gradient(180deg,#10171E 0%,#121A22 52%,#0E141A 100%);
+}
+body::before{
+  content:"";
+  position:fixed;inset:0;pointer-events:none;opacity:.22;
+  background-image:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:24px 24px;
+  mask-image:linear-gradient(to bottom,black,transparent 88%);
+}
+
+.wrap{
+  position:relative;
+  width:min(100%,34rem);
+  padding:max(1rem,env(safe-area-inset-top)) 1rem max(1.2rem,env(safe-area-inset-bottom));
+}
+
+.screen{position:relative}
+
+/* ---------- 加入畫面 ---------- */
+#gate{
+  position:relative;
+  justify-content:center;
+  gap:1.55rem;
+  min-height:calc(100svh - 2.2rem);
+  padding:2.3rem 1.2rem;
+  isolation:isolate;
+}
+#gate::before{
+  content:"";
+  position:absolute;
+  inset:5.5% 0;
+  z-index:-1;
+  border:1px solid rgba(121,145,165,.18);
+  border-radius:28px;
+  background:linear-gradient(180deg,rgba(25,36,47,.86),rgba(18,27,36,.78));
+  box-shadow:
+    0 28px 80px rgba(0,0,0,.34),
+    inset 0 1px 0 rgba(255,255,255,.025),
+    0 0 0 1px rgba(216,162,58,.035);
+  backdrop-filter:blur(14px);
+}
+#gate::after{
+  content:"";
+  position:absolute;
+  width:11rem;height:11rem;
+  top:5%;right:-7%;
+  z-index:-2;
+  border-radius:50%;
+  background:rgba(216,162,58,.09);
+  filter:blur(36px);
+}
+
+.mark{
+  position:relative;
+  margin:0;
+  font-family:var(--display);
+  font-weight:700;
+  font-size:clamp(2.25rem,9vw,3rem);
+  letter-spacing:-.035em;
+  line-height:1;
+  text-shadow:0 8px 32px rgba(0,0,0,.22);
+}
+.mark::before{
+  content:"SYNC / METRONOME";
+  display:block;
+  margin-bottom:.8rem;
+  color:var(--brass-2);
+  font-family:var(--display);
+  font-size:.62rem;
+  font-weight:700;
+  letter-spacing:.24em;
+  text-indent:.24em;
+  opacity:.9;
+}
+.mark span{
+  margin-top:.8rem;
+  color:#92A0AD;
+  font-size:.86rem;
+  line-height:1.6;
+  letter-spacing:.035em;
+}
+
+#gate .stack{gap:.72rem}
+#code{
+  width:100%;
+  min-height:4.7rem;
+  padding:.85rem .8rem .75rem;
+  border-radius:16px;
+  border:1px solid #354554;
+  background:
+    linear-gradient(180deg,rgba(31,44,56,.96),rgba(24,35,45,.96));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 12px 30px rgba(0,0,0,.18);
+  color:var(--paper);
+  font-family:var(--display);
+  font-size:clamp(2.35rem,12vw,3.35rem);
+  letter-spacing:.22em;
+  text-indent:.22em;
+  transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
+}
+#code::placeholder{color:#526272}
+#code:focus{
+  outline:none;
+  border-color:rgba(217,164,59,.85);
+  box-shadow:
+    0 0 0 4px rgba(217,164,59,.08),
+    inset 0 1px 0 rgba(255,255,255,.035),
+    0 14px 34px rgba(0,0,0,.2);
+  transform:translateY(-1px);
+}
+
+.btn{
+  min-height:3.35rem;
+  border-radius:14px;
+  padding:.95rem 1rem;
+  font-weight:650;
+  letter-spacing:.01em;
+  transition:transform .14s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease;
+}
+.btn-solid{
+  color:#191207;
+  background:linear-gradient(135deg,var(--brass-2),var(--brass));
+  box-shadow:0 10px 24px rgba(216,162,58,.18),inset 0 1px 0 rgba(255,255,255,.24);
+}
+.btn-solid:hover{box-shadow:0 14px 30px rgba(216,162,58,.24),inset 0 1px 0 rgba(255,255,255,.24)}
+.btn-quiet{
+  color:var(--paper);
+  border:1px solid #334251;
+  background:linear-gradient(180deg,#1C2833,#19232D);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+.btn-quiet:hover{background:#202D39;border-color:#405261}
+.btn:active{transform:scale(.985) translateY(1px)}
+.btn-link{
+  color:#9BA8B3;
+  font-size:.78rem;
+  text-decoration:none;
+  letter-spacing:.01em;
+  padding:.5rem .35rem;
+  border-radius:8px;
+}
+.btn-link:hover{color:var(--paper);background:rgba(255,255,255,.03)}
+.hint{color:#7F8F9D;font-size:.76rem;line-height:1.65}
+#gate > .hint{max-width:22rem;margin-inline:auto}
+
+/* ---------- 房間畫面 ---------- */
+#room{
+  gap:.9rem;
+  padding:1rem 1.05rem 1.15rem;
+  margin-top:.35rem;
+  border:1px solid rgba(116,138,157,.17);
+  border-radius:25px;
+  background:
+    linear-gradient(180deg,rgba(25,36,47,.93),rgba(17,26,34,.94));
+  box-shadow:0 28px 70px rgba(0,0,0,.30),inset 0 1px 0 rgba(255,255,255,.025);
+  backdrop-filter:blur(16px);
+}
+
+.bar{
+  padding:.15rem .15rem .75rem;
+  border-bottom:1px solid var(--line-soft);
+}
+.roomcode{
+  font-size:1rem;
+  line-height:1.1;
+  letter-spacing:.18em;
+  color:var(--brass-2);
+}
+.roomcode small{
+  margin-top:.2rem;
+  font-size:.62rem;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#72818E;
+}
+.bar-right{gap:.28rem}
+.chip{
+  padding:.28rem .55rem;
+  border-radius:999px;
+  background:rgba(255,255,255,.018);
+  border-color:#354452;
+  color:#8998A4;
+  font-size:.66rem;
+}
+.chip.lit{background:rgba(216,162,58,.07);color:var(--brass-2);border-color:rgba(216,162,58,.55)}
+.chip.warn{background:rgba(224,113,79,.06)}
+
+.tempo{
+  padding:.5rem 0 .1rem;
+  margin-top:0;
+}
+.tempo-num{
+  font-size:clamp(4.5rem,20vw,6rem);
+  letter-spacing:-.065em;
+  line-height:.9;
+  text-shadow:0 12px 34px rgba(0,0,0,.24);
+}
+.tempo-label{
+  margin-top:.5rem;
+  color:#8796A3;
+  font-size:.72rem;
+  letter-spacing:.04em;
+}
+
+#shared{
+  gap:.9rem;
+  padding-top:.25rem;
+}
+
+.beatrow{
+  gap:5px;
+  padding:.4rem;
+  border:1px solid rgba(119,141,160,.14);
+  border-radius:15px;
+  background:rgba(7,12,17,.22);
+}
+.cell{
+  height:62px;
+  border-radius:11px;
+  border-color:#324150;
+  background:linear-gradient(180deg,#1C2833,#18232D);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+  padding-bottom:7px;
+  font-size:.67rem;
+}
+.cell::before{height:0;background:linear-gradient(90deg,#B9852C,var(--brass-2))}
+.cell.acc::before{height:5px}
+.cell.acc{color:var(--brass-2)}
+.cell.now{
+  background:#E7E0D3;
+  color:#121820;
+  box-shadow:0 0 0 2px rgba(231,224,211,.08),0 8px 20px rgba(0,0,0,.18);
+}
+.cell.now.acc{background:var(--brass-2);color:#1A1206}
+
+.setrow{gap:.48rem;font-size:.76rem;color:#8C9AA6}
+.mini,.unitbtn{
+  border-color:#354452;
+  background:#1A2530;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+.mini{width:2.1rem;height:2.1rem;border-radius:10px}
+.mini:hover,.unitbtn:hover,.step:hover{background:#22303C;border-color:#425363}
+.setval{font-size:1.02rem}
+.unitbtn{height:2.1rem;font-size:.76rem}
+
+.chips{gap:5px;padding:.1rem 0 .15rem}
+.subchip{
+  min-width:3rem;
+  padding:.56rem .2rem;
+  border-radius:10px;
+  background:#1A2530;
+  border-color:#31404E;
+  color:#81909D;
+}
+.subchip:hover{background:#22303C;color:#AEB9C1}
+.subchip.on{
+  background:rgba(216,162,58,.09);
+  border-color:rgba(216,162,58,.72);
+  color:var(--brass-2);
+  box-shadow:inset 0 0 0 1px rgba(216,162,58,.06);
+}
+
+.rowctl{gap:.65rem;padding:.25rem 0}
+.step{
+  flex-basis:3.2rem;
+  height:3.2rem;
+  border-radius:13px;
+  border-color:#344250;
+  background:linear-gradient(180deg,#1D2934,#19242E);
+  color:#D4D0C7;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+input[type=range]{padding:.7rem 0}
+input[type=range]::-webkit-slider-runnable-track{
+  height:4px;
+  background:linear-gradient(90deg,var(--brass) 0%,var(--brass) var(--value,45%),#33414E var(--value,45%),#33414E 100%);
+  border-radius:999px;
+}
+input[type=range]::-moz-range-track{height:4px;background:#33414E;border-radius:999px}
+input[type=range]::-moz-range-progress{height:4px;background:var(--brass);border-radius:999px}
+input[type=range]::-webkit-slider-thumb{
+  width:22px;height:22px;
+  margin-top:-9px;
+  background:#F1EBDF;
+  border:2px solid #D7A13B;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);
+}
+input[type=range]::-moz-range-thumb{
+  width:22px;height:22px;
+  background:#F1EBDF;
+  border:2px solid #D7A13B;
+  box-shadow:0 4px 14px rgba(0,0,0,.25);
+}
+
+#play{
+  min-height:3.5rem;
+  font-size:1rem;
+  border-radius:15px;
+  letter-spacing:.03em;
+}
+#play.on{
+  background:#EEE7D9;
+  color:#11181F;
+  box-shadow:0 10px 28px rgba(231,224,211,.08);
+}
+
+#roomMsg{margin:.05rem 0;font-size:.76rem!important}
+.volrow{
+  gap:.6rem;
+  padding:.62rem .72rem;
+  border:1px solid rgba(111,132,150,.13);
+  border-radius:12px;
+  background:rgba(9,15,20,.23);
+  color:#8493A0;
+  font-size:.72rem;
+}
+.volrow .val{color:#BAC2C9;font-weight:650}
+.volrow .val.hot{color:var(--alert)}
+
+/* ---------- 折疊設定 ---------- */
+details{
+  padding:.72rem 0 0;
+  border-top:1px solid var(--line-soft);
+}
+summary{
+  min-height:2.35rem;
+  padding:.55rem .65rem;
+  border:1px solid rgba(111,132,150,.12);
+  border-radius:11px;
+  background:rgba(27,38,48,.46);
+  color:#8797A3;
+  font-size:.78rem;
+  cursor:pointer;
+  transition:background .16s ease,border-color .16s ease;
+}
+summary:hover{background:#1C2934;border-color:#354654}
+summary b{color:#D9D5CC}
+details[open] summary{border-color:rgba(216,162,58,.24);background:rgba(216,162,58,.04)}
+details > :not(summary){margin-left:.25rem;margin-right:.25rem}
+
+.songs{gap:6px;margin-top:.7rem}
+.song{gap:6px}
+.song-main,.song-side,.saverow input,.saverow button,#songBox{
+  border-color:#31404E;
+  background:#19242E;
+}
+.song-main{padding:.58rem .68rem;border-radius:11px}
+.song-main:hover{background:#202D38;border-color:#435362}
+.song-main b{font-size:.86rem}
+.song-main span{font-size:.69rem;color:#7F8E9A}
+.song-side{width:2.2rem;border-radius:11px}
+.saverow{gap:6px;margin-top:.65rem}
+.saverow input{border-radius:10px}
+.saverow input::placeholder{color:#5D6C79}
+.saverow button{border-radius:10px;padding:0 .9rem;background:#202D39}
+#songBox{height:4.8rem}
+
+.linkrow{gap:.3rem;margin-top:.35rem}
+
+/* focus / hover */
+button:hover{filter:brightness(1.035)}
+button:disabled{filter:none}
+
+@media (min-width:700px){
+  .wrap{padding-top:2rem;padding-bottom:2rem}
+  #gate{min-height:calc(100svh - 4rem);padding-inline:2rem}
+  #room{padding:1.15rem 1.2rem 1.3rem}
+}
+
+@media (max-width:420px){
+  #gate{padding-inline:.7rem}
+  #gate::before{inset:3.5% 0;border-radius:23px}
+  .mark{font-size:2.15rem}
+  .setrow{gap:.35rem}
+  .setrow > span:first-child{white-space:nowrap}
+  .step{flex-basis:2.9rem;height:3rem}
+}
+
+
+/* =========================================================
+   Visual refresh 2 — Soft Violet / Deep Magenta
+   以參考圖的 #EC91EE、#B60044、#D9C8E8 為核心，
+   改成明亮、柔和、偏產品化的節拍器介面。
+   ========================================================= */
+:root{
+  --ink:#111827;
+  --ink-2:#FFFFFF;
+  --ink-3:#F7F2F9;
+  --line:#E7DCEB;
+  --line-soft:#EFE6F2;
+  --paper:#111827;
+  --paper-2:#4B5563;
+  --mute:#7C7182;
+  --brass:#B60044;
+  --brass-2:#EC91EE;
+  --alert:#C51F4B;
+  --violet:#EC91EE;
+  --violet-soft:#D9C8E8;
+  --rose:#FF9BAE;
+  --surface:#F9FAFB;
+  --navy:#111A2D;
+  --display:"Bricolage Grotesque",var(--ui);
+}
+
+html{background:var(--surface)}
+body{
+  color:var(--paper);
+  background:
+    radial-gradient(circle at 82% 0%, rgba(236,145,238,.18), transparent 26rem),
+    radial-gradient(circle at 8% 88%, rgba(182,0,68,.07), transparent 28rem),
+    linear-gradient(180deg,#FFFFFF 0%,#F9FAFB 48%,#F6F4F8 100%);
+}
+body::before{
+  opacity:.34;
+  background-image:
+    radial-gradient(rgba(182,0,68,.035) .7px, transparent .7px);
+  background-size:9px 9px;
+  mask-image:linear-gradient(to bottom,black,transparent 92%);
+}
+
+.wrap{
+  width:min(100%,34rem);
+  padding:max(1.15rem,env(safe-area-inset-top)) 1rem max(1.25rem,env(safe-area-inset-bottom));
+}
+
+/* ---------- 首頁 ---------- */
+#gate{
+  position:relative;
+  justify-content:center;
+  gap:1.65rem;
+  padding:1.5rem .15rem;
+}
+#gate::before{
+  content:"";
+  position:absolute;
+  inset:5% -1rem 4%;
+  border-radius:28px;
+  background:rgba(255,255,255,.76);
+  border:1px solid rgba(255,255,255,.95);
+  box-shadow:
+    0 28px 70px rgba(50,25,53,.10),
+    inset 0 1px 0 rgba(255,255,255,.95);
+  backdrop-filter:blur(16px);
+  -webkit-backdrop-filter:blur(16px);
+  z-index:-1;
+}
+.mark{
+  font-size:clamp(2.15rem,10vw,3rem);
+  color:var(--navy);
+  letter-spacing:-.035em;
+  text-shadow:0 4px 18px rgba(182,0,68,.08);
+}
+.mark::before{
+  content:"SYNC METRONOME";
+  display:block;
+  margin-bottom:.55rem;
+  font-family:var(--ui);
+  font-size:.64rem;
+  font-weight:700;
+  letter-spacing:.24em;
+  color:var(--brass);
+}
+.mark span{
+  color:#897B91;
+  font-size:.86rem;
+  margin-top:.65rem;
+}
+
+.stack{gap:.72rem}
+#code{
+  background:linear-gradient(180deg,#F5F0F8,#EEE8F3);
+  border:1px solid #E0D2E8;
+  border-radius:18px;
+  padding:.9rem .65rem;
+  color:var(--navy);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.9),
+    0 10px 25px rgba(60,37,69,.06);
+}
+#code::placeholder{color:#B7A9BC}
+#code:focus{
+  border-color:var(--violet);
+  box-shadow:0 0 0 4px rgba(236,145,238,.18),inset 0 1px 0 rgba(255,255,255,.9);
+}
+
+.btn{
+  border-radius:16px;
+  padding:1rem 1.05rem;
+  font-weight:700;
+  box-shadow:0 10px 22px rgba(37,20,46,.08);
+}
+.btn-solid{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(135deg,#C6004D 0%,#B60044 58%,#9E003C 100%);
+  color:#FFF;
+  box-shadow:0 12px 24px rgba(182,0,68,.24);
+}
+.btn-solid::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(120deg,transparent 20%,rgba(255,255,255,.18) 50%,transparent 80%);
+  transform:translateX(-120%);
+  transition:transform .45s ease;
+}
+.btn-solid:hover::after{transform:translateX(120%)}
+.btn-solid:active{box-shadow:0 5px 12px rgba(182,0,68,.20)}
+.btn-quiet{
+  background:#fff;
+  border:1px solid #E5DDEA;
+  color:var(--navy);
+  box-shadow:0 8px 18px rgba(38,26,44,.06);
+}
+.btn-quiet:active{background:#F8F4F9}
+.btn-link{color:#8B7B91}
+.err{color:var(--alert)}
+
+/* ---------- 房間 ---------- */
+#room{gap:1rem}
+.bar{
+  padding:.3rem .15rem .1rem;
+}
+.roomcode{
+  color:var(--brass);
+  font-size:1.1rem;
+}
+.roomcode small{color:#9D8EA4}
+.bar-right{gap:.4rem}
+.chip{
+  color:#756977;
+  background:rgba(255,255,255,.8);
+  border-color:#E8DCEB;
+  box-shadow:0 5px 14px rgba(42,29,47,.05);
+}
+.chip.warn{color:var(--alert);border-color:#F0B8C6}
+.chip.lit{color:var(--brass);border-color:#D98BA9;background:#FFF4F8}
+
+.tempo{
+  margin:.2rem 0 -.1rem;
+  padding:1rem 0 .85rem;
+  border-radius:24px;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(236,145,238,.28), transparent 42%),
+    linear-gradient(180deg,#FFF 0%,#FCF8FD 100%);
+  border:1px solid #EEE3F0;
+  box-shadow:0 16px 34px rgba(43,28,49,.08),inset 0 1px 0 rgba(255,255,255,.95);
+}
+.tempo-num{
+  color:var(--navy);
+  font-size:clamp(4rem,18vw,5.3rem);
+  letter-spacing:-.055em;
+  text-shadow:0 8px 25px rgba(17,26,45,.10);
+}
+.tempo-label{color:#8B7A92}
+
+#shared{
+  gap:.78rem;
+  padding:.15rem 0;
+}
+.beatrow{
+  gap:5px;
+  padding:.35rem;
+  border-radius:16px;
+  background:#F2EBF5;
+  border:1px solid #E8DCEA;
+}
+.cell{
+  height:62px;
+  border-radius:11px;
+  background:#FFF;
+  border:1px solid #E5D8E9;
+  color:#9B8EA1;
+  box-shadow:0 5px 12px rgba(39,28,46,.05),inset 0 1px 0 rgba(255,255,255,.98);
+}
+.cell::before{background:var(--violet)}
+.cell.acc{
+  color:var(--brass);
+  background:#FFF6FA;
+}
+.cell.now{
+  background:var(--violet);
+  border-color:var(--violet);
+  color:var(--navy);
+  box-shadow:0 10px 22px rgba(236,145,238,.26);
+}
+.cell.now.acc{
+  background:var(--brass);
+  border-color:var(--brass);
+  color:#FFF;
+}
+
+.setrow{color:#82768A}
+.mini{
+  background:#FFF;
+  border-color:#E6DAEA;
+  color:var(--navy);
+  box-shadow:0 5px 11px rgba(41,29,47,.05);
+}
+.mini:active{background:#F5EEF7}
+.setval{color:var(--navy)}
+.unitbtn{
+  background:#FFF;
+  border-color:#E3D7E8;
+  color:var(--navy);
+  box-shadow:0 5px 11px rgba(41,29,47,.05);
+}
+.unitbtn:active{background:#F5EEF7}
+
+.subchip{
+  background:#FFF;
+  border-color:#E5D9E9;
+  color:#94869B;
+  box-shadow:0 4px 10px rgba(41,29,47,.04);
+}
+.subchip.on{
+  background:#F5EAF7;
+  border-color:var(--violet);
+  color:var(--brass);
+  box-shadow:0 6px 14px rgba(236,145,238,.16);
+}
+
+.step{
+  background:#FFF;
+  border-color:#E3D7E8;
+  color:var(--navy);
+  box-shadow:0 7px 16px rgba(41,29,47,.06);
+}
+.step:active{background:#F5EEF7}
+
+input[type=range]::-webkit-slider-runnable-track{background:#E2D6E7}
+input[type=range]::-moz-range-track{background:#E2D6E7}
+input[type=range]::-webkit-slider-thumb{
+  background:var(--brass);
+  box-shadow:0 3px 10px rgba(182,0,68,.24);
+}
+input[type=range]::-moz-range-thumb{
+  background:var(--brass);
+  box-shadow:0 3px 10px rgba(182,0,68,.24);
+}
+
+.volrow{color:#8A7B91}
+.volrow .val{color:var(--navy)}
+#play{
+  padding:1.08rem;
+  letter-spacing:.02em;
+}
+#play.on{
+  background:var(--navy);
+  color:#FFF;
+  box-shadow:0 12px 24px rgba(17,26,45,.18);
+}
+
+/* ---------- 折疊設定 ---------- */
+details{
+  border-top:0;
+  padding:.25rem 0;
+  background:#FFF;
+  border:1px solid #EAE0ED;
+  border-radius:16px;
+  box-shadow:0 8px 20px rgba(40,27,45,.045);
+  overflow:hidden;
+}
+summary{
+  padding:.85rem .9rem;
+  color:#756978;
+  cursor:pointer;
+}
+summary b{color:var(--navy)}
+summary::after{
+  content:"＋";
+  color:#AF8FB3;
+  font-size:1rem;
+  transition:transform .18s ease;
+}
+details[open] summary::after{content:"−"}
+details > *:not(summary){margin-left:.9rem;margin-right:.9rem}
+.hint{color:#8D8093}
+
+/* ---------- 曲目 ---------- */
+.song-main{
+  background:#FBF9FC;
+  border-color:#E6DAE9;
+}
+.song-main b{color:var(--navy)}
+.song-main span{color:#918297}
+.song-side{
+  background:#FFF;
+  border-color:#E4D8E8;
+  color:#8D7D95;
+}
+.saverow input,
+#songBox{
+  background:#FBF9FC;
+  border-color:#E3D7E8;
+  color:var(--navy);
+}
+.saverow input:focus{border-color:var(--violet);box-shadow:0 0 0 3px rgba(236,145,238,.15)}
+.saverow button{
+  background:#F3EAF6;
+  border-color:#E3D7E8;
+  color:var(--navy);
+}
+
+/* ---------- 共用 focus / selected ---------- */
+:focus-visible{
+  outline:2px solid var(--brass);
+  outline-offset:3px;
+  border-radius:7px;
+}
+
+@media (max-width:380px){
+  #gate::before{inset:3% -.35rem 2%}
+  .tempo{border-radius:20px}
+  .cell{height:56px}
+}
+
+
+
+/* =========================================================
+   Dynamic palette system — 10 rotating themes
+   CSS variables are intentionally semantic so JS can swap a
+   complete visual system without touching the application logic.
+   ========================================================= */
+:root{
+  --ink:#111827;
+  --ink-2:#FFFFFF;
+  --ink-3:#F7F2F9;
+  --line:#E7DCEB;
+  --line-soft:#EFE6F2;
+  --paper:#111827;
+  --paper-2:#4B5563;
+  --mute:#7C7182;
+  --brass:#B60044;
+  --brass-2:#EC91EE;
+  --alert:#C51F4B;
+  --violet:#EC91EE;
+  --violet-soft:#D9C8E8;
+  --rose:#FF9BAE;
+  --surface:#F9FAFB;
+  --navy:#111A2D;
+  --bg-top:#FFFFFF;
+  --bg-bottom:#F6F4F8;
+  --card:#FFFFFF;
+  --card-soft:#FBF9FC;
+  --track:#E2D6E7;
+  --beat-bg:#F2EBF5;
+  --shadow-rgb:43,28,49;
+}
+
+body{
+  background:
+    radial-gradient(circle at 82% 0%, color-mix(in srgb, var(--brass-2) 18%, transparent), transparent 26rem),
+    radial-gradient(circle at 8% 88%, color-mix(in srgb, var(--brass) 8%, transparent), transparent 28rem),
+    linear-gradient(180deg,var(--bg-top) 0%,var(--surface) 48%,var(--bg-bottom) 100%);
+}
+body::before{
+  background-image:radial-gradient(color-mix(in srgb, var(--brass) 5%, transparent) .7px, transparent .7px);
+}
+
+#gate::before{
+  background:color-mix(in srgb, var(--card) 76%, transparent);
+  box-shadow:0 28px 70px rgba(var(--shadow-rgb),.10),inset 0 1px 0 rgba(255,255,255,.95);
+}
+.mark{color:var(--navy);text-shadow:0 4px 18px color-mix(in srgb, var(--brass) 8%, transparent)}
+.mark::before{color:var(--brass)}
+.mark span{color:var(--mute)}
+#code{background:linear-gradient(180deg,var(--card-soft),var(--ink-3));border-color:var(--line);color:var(--navy);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 10px 25px rgba(var(--shadow-rgb),.06)}
+#code::placeholder{color:color-mix(in srgb,var(--mute) 55%,white)}
+#code:focus{border-color:var(--violet);box-shadow:0 0 0 4px color-mix(in srgb,var(--violet) 18%,transparent),inset 0 1px 0 rgba(255,255,255,.9)}
+.btn-solid{background:linear-gradient(135deg,var(--brass-2),var(--brass) 58%,color-mix(in srgb,var(--brass) 82%,black));color:#fff;box-shadow:0 12px 24px color-mix(in srgb,var(--brass) 24%,transparent)}
+.btn-solid:active{box-shadow:0 5px 12px color-mix(in srgb,var(--brass) 20%,transparent)}
+.btn-quiet{background:var(--card);border-color:var(--line);color:var(--navy);box-shadow:0 8px 18px rgba(var(--shadow-rgb),.06)}
+.btn-quiet:active{background:var(--ink-3)}
+.btn-link{color:var(--mute)}
+.err{color:var(--alert)}
+.roomcode{color:var(--brass)}
+.roomcode small{color:var(--mute)}
+.chip{color:var(--mute);background:color-mix(in srgb,var(--card) 85%,transparent);border-color:var(--line);box-shadow:0 5px 14px rgba(var(--shadow-rgb),.05)}
+.chip.warn{color:var(--alert);border-color:color-mix(in srgb,var(--alert) 35%,white)}
+.chip.lit{color:var(--brass);border-color:color-mix(in srgb,var(--brass) 45%,white);background:color-mix(in srgb,var(--brass) 7%,white)}
+.tempo{background:radial-gradient(circle at 50% 10%,color-mix(in srgb,var(--brass-2) 28%,transparent),transparent 42%),linear-gradient(180deg,var(--card),color-mix(in srgb,var(--card) 82%,var(--violet-soft)));border-color:var(--line);box-shadow:0 16px 34px rgba(var(--shadow-rgb),.08),inset 0 1px 0 rgba(255,255,255,.95)}
+.tempo-num{color:var(--navy);text-shadow:0 8px 25px rgba(var(--shadow-rgb),.10)}
+.tempo-label{color:var(--mute)}
+.beatrow{background:var(--beat-bg);border-color:var(--line)}
+.cell{background:var(--card);border-color:var(--line);color:color-mix(in srgb,var(--mute) 90%,white);box-shadow:0 5px 12px rgba(var(--shadow-rgb),.05),inset 0 1px 0 rgba(255,255,255,.98)}
+.cell::before{background:var(--violet)}
+.cell.acc{color:var(--brass);background:color-mix(in srgb,var(--brass) 5%,white)}
+.cell.now{background:var(--violet);border-color:var(--violet);color:var(--navy);box-shadow:0 10px 22px color-mix(in srgb,var(--violet) 26%,transparent)}
+.cell.now.acc{background:var(--brass);border-color:var(--brass);color:#fff}
+.setrow{color:var(--mute)}
+.mini,.unitbtn,.step,.subchip{background:var(--card);border-color:var(--line);color:var(--navy);box-shadow:0 5px 11px rgba(var(--shadow-rgb),.05)}
+.mini:active,.unitbtn:active,.step:active{background:var(--ink-3)}
+.setval{color:var(--navy)}
+.subchip{color:color-mix(in srgb,var(--mute) 90%,white)}
+.subchip.on{background:color-mix(in srgb,var(--violet) 13%,white);border-color:var(--violet);color:var(--brass);box-shadow:0 6px 14px color-mix(in srgb,var(--violet) 16%,transparent)}
+input[type=range]::-webkit-slider-runnable-track,input[type=range]::-moz-range-track{background:var(--track)}
+input[type=range]::-webkit-slider-thumb,input[type=range]::-moz-range-thumb{background:var(--brass);box-shadow:0 3px 10px color-mix(in srgb,var(--brass) 24%,transparent)}
+.volrow{color:var(--mute)}
+.volrow .val{color:var(--navy)}
+#play.on{background:var(--navy);color:#fff;box-shadow:0 12px 24px rgba(17,26,45,.18)}
+details{background:var(--card);border-color:var(--line);box-shadow:0 8px 20px rgba(var(--shadow-rgb),.045)}
+summary{color:var(--mute)}
+summary b{color:var(--navy)}
+summary::after{color:color-mix(in srgb,var(--brass) 45%,white)}
+.hint{color:var(--mute)}
+.song-main{background:var(--card-soft);border-color:var(--line)}
+.song-main b{color:var(--navy)}
+.song-main span{color:var(--mute)}
+.song-side{background:var(--card);border-color:var(--line);color:var(--mute)}
+.saverow input,#songBox{background:var(--card-soft);border-color:var(--line);color:var(--navy)}
+.saverow input:focus{border-color:var(--violet);box-shadow:0 0 0 3px color-mix(in srgb,var(--violet) 15%,transparent)}
+.saverow button{background:color-mix(in srgb,var(--violet) 12%,white);border-color:var(--line);color:var(--navy)}
+:focus-visible{outline-color:var(--brass)}
+
+
+/* =========================================================
+   High-contrast text layer
+   自動判斷背景亮度；深色主題一律切換成高可讀文字。
+   ========================================================= */
+:root[data-contrast="dark"]{
+  --paper:#F8FAFC;
+  --paper-2:#E2E8F0;
+  --mute:#CBD5E1;
+  --navy:#FFFFFF;
+  --line:#475569;
+  --line-soft:rgba(226,232,240,.22);
+  --card:#182330;
+  --card-soft:#202D3A;
+  --ink-3:#243342;
+  --track:#64748B;
+  --beat-bg:#15202B;
+  --surface:#0F1720;
+}
+
+:root[data-contrast="dark"] body{
+  color:var(--paper);
+  background:
+    radial-gradient(circle at 82% 0%, color-mix(in srgb,var(--brass-2) 18%,transparent),transparent 26rem),
+    radial-gradient(circle at 8% 88%, color-mix(in srgb,var(--brass) 10%,transparent),transparent 28rem),
+    linear-gradient(180deg,#0B1118 0%,#101923 48%,#0B1118 100%);
+}
+:root[data-contrast="dark"] #gate::before{
+  background:linear-gradient(180deg,rgba(25,36,47,.96),rgba(17,27,37,.94));
+  border-color:rgba(203,213,225,.22);
+  box-shadow:0 28px 70px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.05);
+}
+:root[data-contrast="dark"] .mark,
+:root[data-contrast="dark"] .tempo-num,
+:root[data-contrast="dark"] .setval,
+:root[data-contrast="dark"] summary b,
+:root[data-contrast="dark"] .song-main b{
+  color:var(--paper);
+}
+:root[data-contrast="dark"] .mark span,
+:root[data-contrast="dark"] .tempo-label,
+:root[data-contrast="dark"] .setrow,
+:root[data-contrast="dark"] .volrow,
+:root[data-contrast="dark"] summary,
+:root[data-contrast="dark"] .hint,
+:root[data-contrast="dark"] .btn-link,
+:root[data-contrast="dark"] .roomcode small,
+:root[data-contrast="dark"] .chip,
+:root[data-contrast="dark"] .song-main span,
+:root[data-contrast="dark"] .song-side,
+:root[data-contrast="dark"] .subchip{
+  color:var(--mute);
+}
+:root[data-contrast="dark"] .tempo{
+  background:linear-gradient(180deg,#182532,#13202B);
+  border-color:var(--line);
+  box-shadow:0 16px 34px rgba(0,0,0,.34),inset 0 1px 0 rgba(255,255,255,.04);
+}
+:root[data-contrast="dark"] .cell,
+:root[data-contrast="dark"] .mini,
+:root[data-contrast="dark"] .unitbtn,
+:root[data-contrast="dark"] .step,
+:root[data-contrast="dark"] .subchip,
+:root[data-contrast="dark"] details,
+:root[data-contrast="dark"] .song-main,
+:root[data-contrast="dark"] .song-side,
+:root[data-contrast="dark"] .saverow input,
+:root[data-contrast="dark"] #songBox,
+:root[data-contrast="dark"] .btn-quiet,
+:root[data-contrast="dark"] #code{
+  background:var(--card);
+  border-color:var(--line);
+  color:var(--paper);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 7px 16px rgba(0,0,0,.18);
+}
+:root[data-contrast="dark"] .cell.acc{
+  background:color-mix(in srgb,var(--brass) 13%,var(--card));
+  color:var(--brass-2);
+}
+:root[data-contrast="dark"] .cell.now{
+  background:var(--brass-2);
+  border-color:var(--brass-2);
+  color:#111827;
+}
+:root[data-contrast="dark"] .cell.now.acc{
+  background:var(--brass);
+  border-color:var(--brass);
+  color:#fff;
+}
+:root[data-contrast="dark"] .subchip.on{
+  background:color-mix(in srgb,var(--brass-2) 18%,var(--card));
+  border-color:var(--brass-2);
+  color:var(--brass-2);
+}
+:root[data-contrast="dark"] input[type=range]::-webkit-slider-runnable-track,
+:root[data-contrast="dark"] input[type=range]::-moz-range-track{background:#64748B}
+:root[data-contrast="dark"] #code::placeholder{color:#94A3B8}
+:root[data-contrast="dark"] .chip{background:rgba(24,35,48,.92)}
+:root[data-contrast="dark"] .chip.warn{color:#FF9A8A;border-color:#B85B4B}
+:root[data-contrast="dark"] .chip.lit{color:var(--brass-2);border-color:var(--brass-2)}
+:root[data-contrast="dark"] .saverow button{color:var(--paper);background:color-mix(in srgb,var(--brass-2) 12%,var(--card))}
+:root[data-contrast="dark"] #play.on{background:#F8FAFC;color:#101820}
+
+
+/* =========================================================
+   Pure black / pure white typography
+   一般文字只使用純黑 #000 或純白 #FFF；保留背景與元件的主題色。
+   ========================================================= */
+html[data-contrast="dark"]{
+  --paper:#FFFFFF;
+  --paper-2:#FFFFFF;
+  --mute:#FFFFFF;
+}
+html[data-contrast="light"]{
+  --paper:#000000;
+  --paper-2:#000000;
+  --mute:#000000;
+}
+
+/* Dark background: white text */
+html[data-contrast="dark"] body,
+html[data-contrast="dark"] button,
+html[data-contrast="dark"] input,
+html[data-contrast="dark"] textarea,
+html[data-contrast="dark"] .mark,
+html[data-contrast="dark"] .mark span,
+html[data-contrast="dark"] .hint,
+html[data-contrast="dark"] .btn-link,
+html[data-contrast="dark"] .roomcode,
+html[data-contrast="dark"] .roomcode small,
+html[data-contrast="dark"] .chip,
+html[data-contrast="dark"] .tempo-label,
+html[data-contrast="dark"] .cell,
+html[data-contrast="dark"] .setrow,
+html[data-contrast="dark"] .setval,
+html[data-contrast="dark"] .unitbtn,
+html[data-contrast="dark"] .subchip,
+html[data-contrast="dark"] .step,
+html[data-contrast="dark"] .volrow,
+html[data-contrast="dark"] .volrow .val,
+html[data-contrast="dark"] summary,
+html[data-contrast="dark"] summary b,
+html[data-contrast="dark"] .song-main b,
+html[data-contrast="dark"] .song-main span,
+html[data-contrast="dark"] .song-side,
+html[data-contrast="dark"] .saverow input,
+html[data-contrast="dark"] .saverow button,
+html[data-contrast="dark"] #songBox{
+  color:#FFFFFF !important;
+}
+html[data-contrast="dark"] #code::placeholder,
+html[data-contrast="dark"] #songBox::placeholder,
+html[data-contrast="dark"] input::placeholder{
+  color:#FFFFFF !important;
+  opacity:.85;
+}
+html[data-contrast="dark"] .cell.now{
+  color:#000000 !important;
+}
+html[data-contrast="dark"] .btn-solid,
+html[data-contrast="dark"] .cell.now.acc,
+html[data-contrast="dark"] #play.on{
+  color:#000000 !important;
+}
+
+/* Light background: black text */
+html[data-contrast="light"] body,
+html[data-contrast="light"] button,
+html[data-contrast="light"] input,
+html[data-contrast="light"] textarea,
+html[data-contrast="light"] .mark,
+html[data-contrast="light"] .mark span,
+html[data-contrast="light"] .hint,
+html[data-contrast="light"] .btn-link,
+html[data-contrast="light"] .roomcode,
+html[data-contrast="light"] .roomcode small,
+html[data-contrast="light"] .chip,
+html[data-contrast="light"] .tempo-num,
+html[data-contrast="light"] .tempo-label,
+html[data-contrast="light"] .cell,
+html[data-contrast="light"] .setrow,
+html[data-contrast="light"] .setval,
+html[data-contrast="light"] .unitbtn,
+html[data-contrast="light"] .subchip,
+html[data-contrast="light"] .step,
+html[data-contrast="light"] .volrow,
+html[data-contrast="light"] .volrow .val,
+html[data-contrast="light"] summary,
+html[data-contrast="light"] summary b,
+html[data-contrast="light"] .song-main b,
+html[data-contrast="light"] .song-main span,
+html[data-contrast="light"] .song-side,
+html[data-contrast="light"] .saverow input,
+html[data-contrast="light"] .saverow button,
+html[data-contrast="light"] #songBox{
+  color:#000000 !important;
+}
+html[data-contrast="light"] #code::placeholder,
+html[data-contrast="light"] #songBox::placeholder,
+html[data-contrast="light"] input::placeholder{
+  color:#000000 !important;
+  opacity:.72;
+}
+html[data-contrast="light"] .btn-solid,
+html[data-contrast="light"] .cell.now,
+html[data-contrast="light"] .cell.now.acc,
+html[data-contrast="light"] #play.on{
+  color:#000000 !important;
+}
+
+/* Checkbox / icon / SVG currentColor follows the same black-white text system. */
+html[data-contrast="dark"] svg,
+html[data-contrast="dark"] .note{ color:#FFFFFF; }
+html[data-contrast="light"] svg,
+html[data-contrast="light"] .note{ color:#000000; }
+
+/* Error text remains the dedicated alert color so error states stay identifiable. */
+html[data-contrast="dark"] .err,
+html[data-contrast="light"] .err,
+html[data-contrast="dark"] .err.hot,
+html[data-contrast="light"] .err.hot,
+html[data-contrast="dark"] .volrow .val.hot,
+html[data-contrast="light"] .volrow .val.hot{
+  color:var(--alert) !important;
+}
+
+
+/* =========================================================
+   Contrast fix v2 — Room shell is dark, light controls stay black.
+   Do not infer text color from the page background alone: the room
+   itself is a dark surface even when the surrounding page is light.
+   ========================================================= */
+#room{
+  color:#FFFFFF;
+}
+#room .bar,
+#room .hint,
+#room .setrow,
+#room .volrow,
+#room .linkrow,
+#room .btn-link,
+#room .roomcode,
+#room .roomcode small,
+#room .bar-right,
+#roomMsg{
+  color:#FFFFFF !important;
+}
+#room .tempo-num,
+#room .tempo-label,
+#room .cell,
+#room .mini,
+#room .unitbtn,
+#room .step,
+#room .subchip,
+#room details,
+#room summary,
+#room summary b,
+#room .song-main,
+#room .song-main b,
+#room .song-main span,
+#room .song-side,
+#room .saverow input,
+#room .saverow button,
+#room #songBox{
+  color:#000000 !important;
+}
+#room .chip{
+  color:#000000 !important;
+}
+#room .setval{
+  color:#FFFFFF !important;
+}
+#room .volrow .val{
+  color:var(--alert) !important;
+}
+#room .btn-solid{
+  color:#FFFFFF !important;
+}
+#room #play.on{
+  color:#000000 !important;
+}
+#room .cell.acc,
+#room .subchip.on{
+  color:#000000 !important;
+}
+#room .cell.now{
+  color:#000000 !important;
+}
+#room .cell.now.acc{
+  color:#FFFFFF !important;
+}
+#room #code::placeholder,
+#room #songBox::placeholder,
+#room input::placeholder{
+  color:#000000 !important;
+  opacity:.72;
+}
+
+
+/* =========================================================
+   折疊面板的文字對比修正
+   前一段（Contrast fix v2）的前提是「房間是深色底，裡面一律白字」，
+   但 details 用的是 var(--card)。淺色主題下卡片是亮的，
+   白字落上去就看不見——曲目、漸快訓練、耳機延遲裡的說明文字
+   消失就是這個原因。這裡讓面板內的文字跟著卡片的明暗走。
+   ========================================================= */
+#room details{ --on-card:#2E2636; --on-card-soft:#6B6076; }
+html[data-contrast="dark"] #room details{ --on-card:#F8FAFC; --on-card-soft:#CBD5E1; }
+
+#room details,
+#room details summary,
+#room details .hint,
+#room details .setrow,
+#room details .setrow span,
+#room details label,
+#room details label span,
+#room details .volrow,
+#room details .volrow span,
+#room details .btn-link,
+#room details .linkrow,
+#room details .linkrow button,
+#room details .song-main span,
+#room details .song-side{
+  color:var(--on-card-soft) !important;
+}
+
+#room details summary b,
+#room details .setval,
+#room details .mini,
+#room details .song-main b,
+#room details .saverow input,
+#room details .saverow button,
+#room details #songBox{
+  color:var(--on-card) !important;
+}
+
+#room details #songBox::placeholder,
+#room details .saverow input::placeholder{
+  color:var(--on-card-soft) !important;
+  opacity:.8;
+}
+
+/* 問答小視窗。放在房間外面，所以文字顏色跟折疊面板用同一套規則自己定 */
+.ask{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+  padding:16px;background:rgba(0,0,0,.45)}
+.ask[hidden]{display:none}
+.ask-card{--on-card:#2E2636;--on-card-soft:#6B6076;
+  width:100%;max-width:340px;padding:1.3rem 1.1rem .9rem;border-radius:18px;text-align:center;
+  background:var(--card);border:1px solid var(--line);color:var(--on-card);
+  box-shadow:0 20px 50px rgba(0,0,0,.3)}
+html[data-contrast="dark"] .ask-card{--on-card:#F8FAFC;--on-card-soft:#CBD5E1}
+#askText{margin:0 0 1.1rem;font-size:.95rem;line-height:1.55;color:var(--on-card)}
+.ask-opts{display:flex;gap:.6rem}
+.ask-opts button{flex:1;padding:.85rem 0;border-radius:12px;border:1px solid var(--line);
+  background:var(--card-soft);color:var(--on-card);font-size:1.3rem;font-weight:700;
+  font-variant-numeric:tabular-nums}
+.ask-opts button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+/* 被帶去填長度時，分、秒兩格閃紅框 */
+@keyframes flashRed{
+  0%,100%{ box-shadow:0 0 0 0 transparent; }
+  25%,75%{ border-color:var(--alert); box-shadow:0 0 0 3px color-mix(in srgb, var(--alert) 45%, transparent);
+           background:color-mix(in srgb, var(--alert) 16%, var(--card-soft)); }
+  50%{ box-shadow:0 0 0 0 transparent; }
+}
+.saverow.calcrow input.flash{ animation:flashRed .7s ease-in-out 2;
+  border-color:var(--alert); }
+.ask-cancel{margin-top:.75rem;padding:.3rem .8rem;font-size:.8rem;background:none;border:0;
+  color:var(--on-card-soft)}
+
+/* 靜音小節：拍子照走，但用比較低調的方式表示，
+   跟正在響的那一拍區分開來 */
+.cell.hush{
+  background:color-mix(in srgb, var(--violet, #EC91EE) 22%, transparent) !important;
+  border-color:color-mix(in srgb, var(--violet, #EC91EE) 40%, transparent) !important;
+  box-shadow:none !important;
+}
+#room .cell.hush{ color:var(--navy, #111A2D) !important; opacity:.85 }
+html[data-contrast="dark"] #room .cell.hush{ color:#F8FAFC !important }
+
+/* 音訊被中斷時的提示條 */
+#resumeBar{
+  border:1px solid var(--alert);
+  background:color-mix(in srgb, var(--alert) 8%, transparent);
+  font-size:.9rem;
+  padding:.85rem;
+  border-radius:14px;
+}
+#room #resumeBar{ color:var(--alert) !important; }
+#resumeBar:active{ background:color-mix(in srgb, var(--alert) 16%, transparent) }
+
+
+/* =========================================================
+   淺色層漏掉的兩處深色底
+   .cell / .mini / .subchip / .step / .song-main 等等在後面的
+   淺色層都已經換成 var(--card)，只有 summary 和 .volrow 沒跟上，
+   還留著舊的深色設計。卡片本身已經有底和外框，裡面再疊一層
+   深色就變成雙框加反灰——那就是折疊列看起來灰灰的原因。
+   ========================================================= */
+#room details > summary{
+  background:transparent !important;
+  border-color:transparent !important;
+}
+#room details > summary:hover{
+  background:color-mix(in srgb, var(--violet) 9%, transparent) !important;
+  border-color:transparent !important;
+}
+#room details[open] > summary{
+  background:transparent !important;
+  border-color:transparent !important;
+  border-bottom:1px solid var(--line) !important;
+  border-radius:0;
+}
+
+/* 音量列：去掉深色條，讓它直接坐在所屬的底上 */
+#room .volrow{
+  background:transparent !important;
+  border-color:color-mix(in srgb, var(--line) 55%, transparent) !important;
+}
+
+
+/* =========================================================
+   深色 / 淺色模式
+   房間之所以一直是深的，是因為後來的淺色層更新了 #gate::before，
+   卻漏掉了 #room——跟 summary、.volrow 是同一類漏網。
+   這裡把兩種模式都補齊：淺色模式讓房間變成淺底，
+   深色模式則啟用檔案裡本來就寫好、但從來沒被觸發過的那套深色變數。
+   ========================================================= */
+
+/* 大廳的模式選擇 */
+.modepick{
+  display:flex; gap:6px; justify-content:center;
+  padding:4px; border-radius:999px;
+  background:color-mix(in srgb, var(--card-soft) 80%, transparent);
+  border:1px solid var(--line);
+  width:fit-content; margin:0 auto;
+}
+.modebtn{
+  padding:.42rem 1.05rem; border-radius:999px;
+  font-size:.82rem; color:var(--mute);
+  transition:background .15s ease, color .15s ease;
+}
+.modebtn.on{
+  background:var(--card);
+  color:var(--navy);
+  box-shadow:0 2px 8px rgba(var(--shadow-rgb),.12);
+  font-weight:600;
+}
+
+/* ---------- 淺色模式 ---------- */
+html[data-mode="light"] #room{
+  background:linear-gradient(180deg,
+    color-mix(in srgb, var(--card) 94%, transparent),
+    color-mix(in srgb, var(--card-soft) 96%, transparent));
+  border-color:var(--line);
+  box-shadow:0 24px 60px rgba(var(--shadow-rgb),.10), inset 0 1px 0 rgba(255,255,255,.95);
+}
+html[data-mode="light"] #room .bar{ border-bottom-color:var(--line) }
+
+/* 前面那層把房間內文字寫死成白色，淺色房間要整組翻過來 */
+html[data-mode="light"] #room,
+html[data-mode="light"] #room .bar,
+html[data-mode="light"] #room .hint,
+html[data-mode="light"] #room .setrow,
+html[data-mode="light"] #room .setrow span,
+html[data-mode="light"] #room .volrow,
+html[data-mode="light"] #room .volrow span,
+html[data-mode="light"] #room .linkrow,
+html[data-mode="light"] #room .btn-link,
+html[data-mode="light"] #room .roomcode small,
+html[data-mode="light"] #room .bar-right{
+  color:var(--mute) !important;
+}
+html[data-mode="light"] #room .roomcode{ color:var(--brass) !important }
+html[data-mode="light"] #room .setval,
+html[data-mode="light"] #room .tempo-num{ color:var(--navy) !important }
+html[data-mode="light"] #room .tempo-label{ color:var(--mute) !important }
+html[data-mode="light"] #room #roomMsg{ color:var(--alert) !important }
+
+/* ---------- 深色模式 ---------- */
+/* 控制項與卡片在深色模式下是深底，文字要翻成亮色 */
+html[data-mode="dark"] #room .cell,
+html[data-mode="dark"] #room .mini,
+html[data-mode="dark"] #room .unitbtn,
+html[data-mode="dark"] #room .step,
+html[data-mode="dark"] #room .subchip,
+html[data-mode="dark"] #room .chip,
+html[data-mode="dark"] #room details,
+html[data-mode="dark"] #room summary,
+html[data-mode="dark"] #room summary b,
+html[data-mode="dark"] #room .song-main,
+html[data-mode="dark"] #room .song-main b,
+html[data-mode="dark"] #room .song-main span,
+html[data-mode="dark"] #room .song-side,
+html[data-mode="dark"] #room .saverow input,
+html[data-mode="dark"] #room .saverow button,
+html[data-mode="dark"] #room #songBox,
+html[data-mode="dark"] #room .tempo-num,
+html[data-mode="dark"] #room .tempo-label{
+  color:var(--paper) !important;
+}
+/* 重音格與選中的細分：深底上要靠顏色辨識，不能用黑字 */
+html[data-mode="dark"] #room .cell.acc{
+  color:var(--brass-2) !important;
+  background:color-mix(in srgb, var(--brass) 16%, var(--card)) !important;
+}
+html[data-mode="dark"] #room .subchip.on{
+  color:var(--brass-2) !important;
+  background:color-mix(in srgb, var(--brass) 16%, var(--card)) !important;
+}
+html[data-mode="dark"] #room #songBox::placeholder,
+html[data-mode="dark"] #room .saverow input::placeholder{
+  color:var(--mute) !important; opacity:.85;
+}
+
+
+/* 速度那行的音符是 SVG 用 currentColor 畫的，字變不見它也會一起不見 */
+
+/* 這幾個狀態的底色不跟著模式走，字色要另外釘死 */
+
+/* 目前這一拍：底是亮紫，兩種模式都要深色字 */
+html[data-mode="light"] #room .cell.now,
+html[data-mode="dark"] #room .cell.now{ color:#111A2D !important }
+html[data-mode="light"] #room .cell.now.acc,
+html[data-mode="dark"] #room .cell.now.acc{ color:#FFFFFF !important }
+
+/* 停止鍵：底是深藍，淺色模式下原本會配到黑字 */
+html[data-mode="light"] #room #play.on{ color:#FFFFFF !important }
+
+/* 靜音小節的格子 */
+html[data-mode="light"] #room .cell.hush{ color:#111A2D !important }
+html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
+
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ========== 加入畫面 ========== -->
+  <!-- 文字是中文版；英文版載入時依 data-i18n / data-i18n-ph / data-i18n-aria 換掉（見「語言」那段） -->
+  <section id="gate" class="screen on">
+    <!-- 名稱用 bdi 包：.mark span 在好幾層樣式裡都被指定成小字副標，不能用 span -->
+    <h1 class="mark"><bdi data-i18n="appName">同步節拍器</bdi>
+      <span data-i18n="tagline">同一個房間的人，耳機裡聽到同一拍。</span>
+    </h1>
+    <div class="stack">
+      <input id="code" inputmode="text" autocomplete="off" autocapitalize="characters"
+             spellcheck="false" maxlength="4" placeholder="房號" data-i18n-ph="codePh">
+      <button id="joinBtn" class="btn btn-solid" data-i18n="join">加入房間</button>
+      <p id="gateErr" class="err"></p>
+      <button id="createBtn" class="btn btn-quiet" data-i18n="create">開一個新房間</button>
+    </div>
+    <p class="hint" data-i18n="gateHint">用有線耳機最準。藍牙耳機會慢半拍，進房後可以自己微調。</p>
+    <p class="hint" id="homeHint" style="display:none"></p>
+    <div class="modepick" role="group" aria-label="外觀" data-i18n-aria="lookAria">
+      <button class="modebtn" id="modeLight" data-mode="light" data-i18n="light">淺色</button>
+      <button class="modebtn" id="modeDark" data-mode="dark" data-i18n="dark">深色</button>
+    </div>
+    <!-- 語言名稱固定用各自的語言寫，不翻譯 -->
+    <div class="modepick" role="group" aria-label="語言" data-i18n-aria="langAria">
+      <button class="modebtn" id="langZh" lang="zh-Hant">繁體中文</button>
+      <button class="modebtn" id="langEn" lang="en">English</button>
+    </div>
+
+    <div id="serverArea" style="display:none">
+      <button class="btn-link" id="serverToggle" data-i18n="serverToggle">伺服器設定</button>
+      <div id="serverBox" style="display:none">
+        <div class="saverow">
+          <input id="serverInput" placeholder="https://你的網址" data-i18n-ph="serverPh" autocomplete="off"
+                 inputmode="url" spellcheck="false">
+          <button id="serverSave" data-i18n="serverSave">存</button>
+        </div>
+        <p class="hint" data-i18n="serverHint">用瀏覽器開網頁時不用設定。包成 app 之後才需要填，
+          填的是你在 Render 上那個網址。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 房間畫面 ========== -->
+  <section id="room" class="screen">
+
+    <div class="bar">
+      <div class="bar-left">
+        <!-- 離開房間：放在房號左邊，像一般 app 的返回鍵 -->
+        <button class="chip backbtn" id="leaveBtn" aria-label="離開房間" data-i18n-aria="leave">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="roomcode" id="roomCode">----<small><span data-i18n="roomWord">房號</span><span class="role" id="roleTag"></span></small></div>
+      </div>
+      <div class="bar-right">
+        <button class="chip" id="muteBtn" aria-label="靜音" data-i18n-aria="muteAria"></button>
+        <button class="chip" id="lockBtn" data-i18n="open">開放</button>
+        <span class="chip" id="people" role="img" aria-label="1 人"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.2" r="2.6" fill="currentColor"/><path d="M3 13.6c.5-2.9 2.6-4.3 5-4.3s4.5 1.4 5 4.3z" fill="currentColor"/></svg><span id="peopleNum">1</span></span>
+        <span class="chip" id="sync" data-i18n="syncing">校正中</span>
+      </div>
+    </div>
+
+    <div class="tempo">
+      <span class="tempo-num" id="bpmNum" role="button" tabindex="0" aria-label="速度，點一下直接輸入" data-i18n-aria="bpmAria">90</span>
+      <input class="tempo-num tempo-input" id="bpmInput" type="text" inputmode="numeric"
+             pattern="[0-9]*" maxlength="3" enterkeyhint="done" autocomplete="off"
+             aria-label="輸入速度" data-i18n-aria="bpmInputAria" style="display:none">
+      <span class="tempo-label" id="tempoLabel"></span>
+    </div>
+
+    <div id="shared">
+      <div class="beatrow" id="beatRow"></div>
+
+      <div class="accrow">
+        <p class="hint" style="margin:0;font-size:.74rem" data-i18n="accHint">點格子切換重音，有重音時第一拍一定是重音</p>
+        <button class="btn-link" id="accClear" data-i18n="accClear">全部取消</button>
+      </div>
+
+      <div class="setrow">
+        <span data-i18n="beatsBefore">每小節</span>
+        <button class="mini" id="beatsMinus" aria-label="減少拍數" data-i18n-aria="beatsLess">−</button>
+        <span class="setval" id="beatsVal">4</span>
+        <button class="mini" id="beatsPlus" aria-label="增加拍數" data-i18n-aria="beatsMore">＋</button>
+        <span data-i18n="beatsAfter">拍</span>
+        <button class="unitbtn" id="tapBtn" aria-label="跟著節奏連點幾下，算出速度" data-i18n-aria="tapAria">Tap</button>
+      </div>
+
+      <div class="chips" id="subRow"></div>
+
+      <div class="rowctl">
+        <button class="step" id="minus" aria-label="慢一格" data-i18n-aria="slower">−</button>
+        <div class="slider-wrap">
+          <input id="bpmRange" type="range" min="15" max="600" step="1" value="90" aria-label="速度" data-i18n-aria="tempoAria">
+        </div>
+        <button class="step" id="plus" aria-label="快一格" data-i18n-aria="faster">＋</button>
+      </div>
+
+      <button id="play" class="btn btn-solid" data-i18n="start">開始</button>
+    </div>
+
+    <button id="resumeBar" class="btn" style="display:none"></button>
+    <p id="roomMsg" class="err" style="text-align:center;font-size:.82rem"></p>
+
+    <!-- 耗時計算（每個人自己的，不同步） -->
+    <details id="calcBox">
+      <summary><span data-i18n="calcTitle">耗時</span> <b id="calcLabel" data-i18n="unset">未設定</b></summary>
+      <div class="saverow calcrow" style="margin-top:.6rem">
+        <span data-i18n="origTempo">原曲速度</span>
+        <input id="calcBpm" type="text" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="120" aria-label="原曲速度" data-i18n-aria="origTempo">
+        <span>BPM</span>
+      </div>
+      <div class="saverow calcrow">
+        <span data-i18n="nowTempo">目前速度</span>
+        <input id="calcNow" type="text" inputmode="numeric" maxlength="3" autocomplete="off" enterkeyhint="done" aria-label="目前速度，跟房間的速度連動" data-i18n-aria="nowTempoAria">
+        <span>BPM</span>
+      </div>
+      <div class="saverow calcrow">
+        <span data-i18n="origLen">原曲長度</span>
+        <input id="calcMin" type="text" inputmode="numeric" maxlength="3" autocomplete="off" aria-label="原曲長度，分" data-i18n-aria="minAria">
+        <span data-i18n="minUnit">分</span>
+        <input id="calcSec" type="text" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="原曲長度，秒" data-i18n-aria="secAria">
+        <span data-i18n="secUnit">秒</span>
+      </div>
+      <p class="calc-out" id="calcOut"></p>
+      <p class="hint" data-i18n="calcHint">「目前速度」跟房間的速度連動：拉上面的滑桿這裡會跟著變，
+        改這裡也會改整個房間的速度。開了漸快訓練的話，算的是起始速度。
+        原曲速度和長度只存在你自己的裝置裡。</p>
+    </details>
+
+    <!-- 曲目清單 -->
+    <details>
+      <summary><span data-i18n="songsTitle">曲目</span> <b id="songCount">0 首</b></summary>
+      <div class="songs" id="songList"></div>
+      <div class="saverow">
+        <input id="songName" placeholder="曲名" data-i18n-ph="songNamePh" maxlength="30" autocomplete="off">
+        <button id="songSave" data-i18n="songSave">存下目前設定</button>
+      </div>
+      <p class="hint" data-i18n="songHint1">曲目存在你自己這支裝置裡。點一首會把速度、拍數、重音、細分、
+        漸快設定一次套用到整個房間。</p>
+      <p class="hint" data-i18n="songHint2">存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。
+        長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。</p>
+      <!-- 文字放在 span 裡：英文版換字時只換 span，才不會把圖示一起蓋掉 -->
+      <div class="linkrow iorow">
+        <button class="iobtn" id="songExport">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5V2.5M5 5.2 8 2.2l3 3M2.8 9.5v3.3h10.4V9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="exportBtn">匯出</span>
+        </button>
+        <button class="iobtn" id="songImport">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M5 7.8l3 3 3-3M2.8 9.5v3.3h10.4V9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-i18n="importBtn">匯入</span>
+        </button>
+      </div>
+      <textarea id="songBox" placeholder="匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。" data-i18n-ph="songBoxPh"></textarea>
+    </details>
+
+    <!-- 預備拍（可以每個樂句前都重新數，循環練同一段） -->
+    <details>
+      <summary><span data-i18n="countTitle">預備拍</span> <b id="countLabel" data-i18n="off">關閉</b></summary>
+      <label class="setrow" style="margin-top:.6rem">
+        <input type="checkbox" id="countOn">
+        <span data-i18n="countOnText">開始前先數預備拍</span>
+      </label>
+      <div class="setrow" style="margin-top:.5rem">
+        <span class="grp">
+          <span data-i18n="countBarsBefore">預備</span>
+          <button class="mini" id="countBarsMinus" aria-label="減少預備小節" data-i18n-aria="countBarsLess">−</button>
+          <input class="setval numin" id="countBarsVal" value="1" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" enterkeyhint="done" autocomplete="off" aria-label="預備幾小節" data-i18n-aria="countBarsAria">
+          <button class="mini" id="countBarsPlus" aria-label="增加預備小節" data-i18n-aria="countBarsMore">＋</button>
+          <span data-i18n="barsWord">小節</span>
+        </span>
+      </div>
+      <div id="countLoopArea">
+        <label class="setrow" style="margin-top:.7rem">
+          <input type="checkbox" id="countLoop">
+          <span data-i18n="countLoopText">每個樂句前都重新數一次（循環練習）</span>
+        </label>
+        <div class="setrow" style="margin-top:.5rem">
+          <span class="grp">
+            <span data-i18n="phraseBefore">樂句</span>
+            <button class="mini" id="phraseMinus" aria-label="樂句少一小節" data-i18n-aria="phraseLess">−</button>
+            <input class="setval numin" id="phraseVal" value="4" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="樂句幾小節" data-i18n-aria="phraseAria">
+            <button class="mini" id="phrasePlus" aria-label="樂句多一小節" data-i18n-aria="phraseMore">＋</button>
+            <span data-i18n="barsWord">小節</span>
+          </span>
+        </div>
+      </div>
+      <p class="hint" data-i18n="countHint">預備拍每一拍都是重音、不響細分，畫面會顯示「預備」。循環時就是【預備】【樂句】【預備】【樂句】…
+        一直重複；靜音訓練從樂句第一小節開始數，漸快只算樂句的小節。</p>
+    </details>
+
+    <!-- 漸快訓練 -->
+    <details>
+      <summary><span data-i18n="rampTitle">漸快訓練</span> <b id="rampLabel" data-i18n="off">關閉</b></summary>
+      <label class="setrow" style="margin-top:.6rem">
+        <input type="checkbox" id="rampOn">
+        <span data-i18n="enable">啟用</span>
+      </label>
+      <div class="setrow" style="margin-top:.5rem">
+        <span class="grp">
+          <span data-i18n="rampEvery">每</span>
+          <button class="mini" id="barsMinus" aria-label="減少小節" data-i18n-aria="barsLess">−</button>
+          <input class="setval numin" id="barsVal" value="4" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="每幾小節加速一次" data-i18n-aria="barsValAria">
+          <button class="mini" id="barsPlus" aria-label="增加小節" data-i18n-aria="barsMore">＋</button>
+          <span data-i18n="rampBarsAdd">小節，加</span>
+        </span>
+        <span class="grp">
+          <button class="mini" id="stepMinus" aria-label="減少增量" data-i18n-aria="stepLess">−</button>
+          <input class="setval numin" id="stepVal" value="2" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="每次加多少 BPM" data-i18n-aria="stepValAria">
+          <button class="mini" id="stepPlus" aria-label="增加增量" data-i18n-aria="stepMore">＋</button>
+          <span>BPM</span>
+        </span>
+      </div>
+      <div class="volrow" style="margin-top:.2rem">
+        <span data-i18n="rampTo">到</span>
+        <input id="targetRange" type="range" min="15" max="600" step="1" value="160" aria-label="目標速度" data-i18n-aria="targetAria">
+        <input class="val numin" id="targetVal" value="160" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="done" autocomplete="off" aria-label="目標速度" data-i18n-aria="targetAria">
+      </div>
+      <p class="hint" data-i18n="rampHint">速度由每支手機自己依同一組參數推算，所以加速的瞬間不會斷拍。
+        到達目標之後就維持不變。</p>
+    </details>
+
+    <!-- 靜音訓練 -->
+    <details>
+      <summary><span data-i18n="muteTitle">靜音訓練</span> <b id="muteLabel" data-i18n="off">關閉</b></summary>
+      <label class="setrow" style="margin-top:.6rem">
+        <input type="checkbox" id="muteOn">
+        <span data-i18n="enable">啟用</span>
+      </label>
+      <div class="setrow" style="margin-top:.5rem">
+        <span class="grp">
+          <span data-i18n="muteEvery">每</span>
+          <button class="mini" id="playMinus" aria-label="減少有聲小節" data-i18n-aria="playLess">−</button>
+          <input class="setval numin" id="playVal" value="3" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="有聲小節數" data-i18n-aria="playValAria">
+          <button class="mini" id="playPlus" aria-label="增加有聲小節" data-i18n-aria="playMore">＋</button>
+          <span data-i18n="muteBarsRest">小節，靜音</span>
+        </span>
+        <span class="grp">
+          <button class="mini" id="restMinus" aria-label="減少靜音小節" data-i18n-aria="restLess">−</button>
+          <input class="setval numin" id="restVal" value="1" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="靜音小節數" data-i18n-aria="restValAria">
+          <button class="mini" id="restPlus" aria-label="增加靜音小節" data-i18n-aria="restMore">＋</button>
+          <span data-i18n="muteBars">小節</span>
+        </span>
+      </div>
+      <p class="hint" data-i18n="muteHint">靜音的那幾小節拍子照走，只是不出聲。畫面上的格子會用比較暗的
+        方式繼續跑，讓你知道現在在第幾拍。這是練內在節奏最有效的方法之一——
+        撐過去之後聲音回來，就知道自己有沒有跑掉。</p>
+    </details>
+
+    <!-- 耳機延遲 -->
+    <details>
+      <summary><span data-i18n="latTitle">我的耳機延遲</span> <b id="latLabel">0 ms</b></summary>
+      <div class="latrow">
+        <button class="mini" id="latMinus" aria-label="延遲減 5 毫秒" data-i18n-aria="latLess">−</button>
+        <input id="latRange" type="range" min="0" max="400" step="5" value="0" aria-label="耳機延遲" data-i18n-aria="latAria">
+        <button class="mini" id="latPlus" aria-label="延遲加 5 毫秒" data-i18n-aria="latMore">＋</button>
+      </div>
+      <p class="hint" data-i18n="latHint1">如果你聽到的拍子比別人慢，往右拉，直到跟大家一致。
+        有線耳機通常不用調，藍牙耳機大約在 120–250 之間。這個設定只影響你自己。</p>
+      <p class="hint" data-i18n="latHint2">聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。
+        長時間大音量會傷聽力，而且是不可逆的。</p>
+    </details>
+
+    <div class="stack" style="margin-top:.7rem">
+      <button id="shareBtn" class="btn-link" data-i18n="share">複製邀請連結</button>
+      <button id="resetAudio" class="btn-link" data-i18n="resetAudio">沒有聲音？重置音訊</button>
+      <p class="hint" id="audioInfo" style="text-align:center;font-size:.72rem"></p>
+    </div>
+  </section>
+
+</div>
+
+<!-- 問答小視窗（存曲目時用）。要放在程式碼前面，載入時才換得到語言 -->
+<div id="ask" class="ask" role="dialog" aria-modal="true" aria-labelledby="askText" hidden>
+  <div class="ask-card">
+    <p id="askText"></p>
+    <div class="ask-opts" id="askOpts"></div>
+    <button class="ask-cancel" id="askCancel" data-i18n="cancel">取消</button>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   10-palette rotation system
+   每次開啟頁面選一組；同一台裝置會先把 10 組輪過一遍，再重新洗牌。
+   完全在瀏覽器端執行，不會影響房間同步與節拍排程。
+   ========================================================= */
+(function applyRandomPalette(){
+  const palettes = [
+    {
+      name:'Soft Violet / Deep Magenta',
+      primary:'#B60044', primarySoft:'#EC91EE', violet:'#EC91EE', violetSoft:'#D9C8E8',
+      surface:'#F9FAFB', bgTop:'#FFFFFF', bgBottom:'#F6F4F8', card:'#FFFFFF', cardSoft:'#FBF9FC',
+      ink3:'#F7F2F9', line:'#E7DCEB', track:'#E2D6E7', beatBg:'#F2EBF5', text:'#111827', muted:'#7C7182',
+      alert:'#C51F4B', navy:'#111A2D', shadow:'43,28,49'
+    },
+    {
+      name:'Sky Blue / Indigo',
+      primary:'#4F46E5', primarySoft:'#8FD3FF', violet:'#8FD3FF', violetSoft:'#CFE8FA',
+      surface:'#F7FAFC', bgTop:'#FFFFFF', bgBottom:'#EEF5FB', card:'#FFFFFF', cardSoft:'#F7FAFD',
+      ink3:'#F1F7FC', line:'#D9E6F1', track:'#D6E4EF', beatBg:'#EDF5FA', text:'#142033', muted:'#718096',
+      alert:'#C43D67', navy:'#15233C', shadow:'31,49,76'
+    },
+    {
+      name:'Mint / Teal',
+      primary:'#00796B', primarySoft:'#79D9C7', violet:'#79D9C7', violetSoft:'#CBEDE7',
+      surface:'#F6FBFA', bgTop:'#FFFFFF', bgBottom:'#EEF8F6', card:'#FFFFFF', cardSoft:'#F6FBFA',
+      ink3:'#EEF8F6', line:'#D5EAE5', track:'#D4E5E1', beatBg:'#EAF6F3', text:'#17302D', muted:'#6E8581',
+      alert:'#C84E64', navy:'#15312D', shadow:'30,56,52'
+    },
+    {
+      name:'Peach / Coral',
+      primary:'#C84A5D', primarySoft:'#FFB39C', violet:'#FFB39C', violetSoft:'#F7D5C9',
+      surface:'#FFF9F7', bgTop:'#FFFFFF', bgBottom:'#FFF2ED', card:'#FFFFFF', cardSoft:'#FFF9F7',
+      ink3:'#FFF4F0', line:'#F0DDD6', track:'#ECD9D2', beatBg:'#FFF0EB', text:'#2D2020', muted:'#8A7773',
+      alert:'#B9284B', navy:'#2B1F27', shadow:'67,38,39'
+    },
+    {
+      name:'Butter / Plum',
+      primary:'#7A3150', primarySoft:'#F5D06F', violet:'#F5D06F', violetSoft:'#EBDDC0',
+      surface:'#FFFCF6', bgTop:'#FFFFFF', bgBottom:'#FBF4E8', card:'#FFFFFF', cardSoft:'#FFFBF4',
+      ink3:'#FAF3E7', line:'#EADFCB', track:'#E6DCC8', beatBg:'#FBF2DF', text:'#29231E', muted:'#81766A',
+      alert:'#B94F45', navy:'#30243A', shadow:'57,43,40'
+    },
+    {
+      name:'Powder Blue / Navy',
+      primary:'#2855C5', primarySoft:'#A7D8FF', violet:'#A7D8FF', violetSoft:'#D5E8F7',
+      surface:'#F7FBFF', bgTop:'#FFFFFF', bgBottom:'#EFF6FC', card:'#FFFFFF', cardSoft:'#F8FBFE',
+      ink3:'#F0F7FC', line:'#D8E5F1', track:'#D5E3EF', beatBg:'#EDF5FB', text:'#17243A', muted:'#718198',
+      alert:'#C63D55', navy:'#12233F', shadow:'28,48,78'
+    },
+    {
+      name:'Sage / Raspberry',
+      primary:'#9E174D', primarySoft:'#A9D2B6', violet:'#A9D2B6', violetSoft:'#D9E7D5',
+      surface:'#F8FBF8', bgTop:'#FFFFFF', bgBottom:'#F0F6F1', card:'#FFFFFF', cardSoft:'#F8FBF8',
+      ink3:'#F1F7F2', line:'#DCE8DD', track:'#D8E4DA', beatBg:'#EDF5EE', text:'#202D24', muted:'#748078',
+      alert:'#B9365C', navy:'#1A2C25', shadow:'36,50,40'
+    },
+    {
+      name:'Lavender / Midnight',
+      primary:'#5B3FA8', primarySoft:'#C5B1F2', violet:'#C5B1F2', violetSoft:'#E1D8F3',
+      surface:'#FAF8FF', bgTop:'#FFFFFF', bgBottom:'#F2EEFA', card:'#FFFFFF', cardSoft:'#FAF8FF',
+      ink3:'#F4F0FA', line:'#E2DAEE', track:'#DED6EA', beatBg:'#F0EAF8', text:'#211D2D', muted:'#7D7489',
+      alert:'#BE4761', navy:'#23203C', shadow:'46,39,66'
+    },
+    {
+      name:'Apricot / Cherry',
+      primary:'#B42A42', primarySoft:'#FFC18A', violet:'#FFC18A', violetSoft:'#F4DDC5',
+      surface:'#FFF9F4', bgTop:'#FFFFFF', bgBottom:'#FFF1E4', card:'#FFFFFF', cardSoft:'#FFF9F5',
+      ink3:'#FFF3E7', line:'#F0DFD0', track:'#EEDACA', beatBg:'#FFF0E2', text:'#30201C', muted:'#8D776D',
+      alert:'#B32042', navy:'#352127', shadow:'66,40,34'
+    },
+    {
+      name:'Ice Blue / Hot Pink',
+      primary:'#D62C83', primarySoft:'#A9E7F6', violet:'#A9E7F6', violetSoft:'#D4EEF4',
+      surface:'#F7FCFE', bgTop:'#FFFFFF', bgBottom:'#EFF8FB', card:'#FFFFFF', cardSoft:'#F8FCFE',
+      ink3:'#EFF8FB', line:'#D6E9EE', track:'#D3E6EB', beatBg:'#EAF6F9', text:'#172632', muted:'#70818A',
+      alert:'#B82861', navy:'#182535', shadow:'28,43,53'
+    }
+  ];
+
+  const root = document.documentElement;
+  let bag = [];
+  try { bag = JSON.parse(localStorage.getItem('mmPaletteBag') || '[]'); } catch(e) {}
+  if (!Array.isArray(bag) || bag.length === 0 || bag.some(i => !Number.isInteger(i) || i < 0 || i >= palettes.length)) {
+    bag = palettes.map((_,i)=>i);
+  }
+  // 洗牌，但避免下一次立刻重複同一組。
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [bag[i], bag[j]] = [bag[j], bag[i]];
+  }
+  const idx = bag.shift();
+  const p = palettes[idx];
+  try { localStorage.setItem('mmPaletteBag', JSON.stringify(bag)); } catch(e) {}
+  try { localStorage.setItem('mmPaletteName', p.name); } catch(e) {}
+
+  const vars = {
+    '--brass':p.primary, '--brass-2':p.primarySoft, '--violet':p.violet, '--violet-soft':p.violetSoft,
+    '--surface':p.surface, '--bg-top':p.bgTop, '--bg-bottom':p.bgBottom, '--card':p.card, '--card-soft':p.cardSoft,
+    '--ink-3':p.ink3, '--line':p.line, '--track':p.track, '--beat-bg':p.beatBg,
+    '--paper':p.text, '--navy':p.navy, '--mute':p.muted, '--alert':p.alert, '--shadow-rgb':p.shadow
+  };
+  for (const [k,v] of Object.entries(vars)) root.style.setProperty(k,v);
+
+  // 語言：記在裝置裡的優先；沒選過就看手機的語言設定，中文用中文，其他都用英文。
+  // 要在最早這段決定，網頁標題才來得及換。（加入主畫面的名稱中英文版都是 Sync Metronome，不用換）
+  let lang = null;
+  try { lang = localStorage.getItem('mmLang'); } catch(e){}
+  if (lang !== 'zh' && lang !== 'en'){
+    const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
+    lang = langs.some(l => /^zh/i.test(l)) ? 'zh' : 'en';
+  }
+  window.MM_LANG = lang;
+  root.lang = lang === 'en' ? 'en' : 'zh-Hant';
+  document.title = (lang === 'en' ? 'Sync Metronome' : '同步節拍器') + ' · ' + p.name;
+  const theme = document.querySelector('meta[name="theme-color"]');
+  if (theme) theme.setAttribute('content', p.surface);
+  root.dataset.palette = p.name;
+
+  // 依實際背景亮度決定文字系統：深色背景使用近白文字與更亮的次要文字。
+  function hexRgb(hex){
+    const m = String(hex).replace('#','').match(/^([0-9a-f]{6})$/i);
+    if(!m) return null;
+    const n = parseInt(m[1],16);
+    return [n>>16,(n>>8)&255,n&255];
+  }
+  function luminance(hex){
+    const rgb = hexRgb(hex); if(!rgb) return 1;
+    const c = rgb.map(v => v/255).map(v => v<=.03928 ? v/12.92 : Math.pow((v+.055)/1.055,2.4));
+    return .2126*c[0] + .7152*c[1] + .0722*c[2];
+  }
+  // 明暗由使用者選，不再從配色亮度去猜。
+  // 十組配色本來都是淺色系，所以那個判斷永遠得到「淺色」，
+  // 深色那一整套變數等於從來沒被用過。
+  let mode = null;
+  try { mode = localStorage.getItem('mmMode'); } catch(e){}
+  if (mode !== 'dark' && mode !== 'light'){
+    mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  const dark = mode === 'dark';
+  root.dataset.mode = mode;
+  root.dataset.contrast = dark ? 'dark' : 'light';
+
+  if (dark){
+    const darkVars = {
+      '--paper':'#F8FAFC', '--paper-2':'#E2E8F0', '--mute':'#CBD5E1', '--navy':'#FFFFFF',
+      '--line':'#475569', '--line-soft':'rgba(226,232,240,.22)', '--card':'#182330',
+      '--card-soft':'#202D3A', '--ink-3':'#243342', '--track':'#64748B', '--beat-bg':'#15202B',
+      '--surface':'#0F1720'
+    };
+    for (const [k,v] of Object.entries(darkVars)) root.style.setProperty(k,v);
+  }
+})();
+</script>
+
+<script>
+/* =========================================================
+   同步節拍器 —— 前端
+
+   核心觀念：網路只傳設定，聲音由這支手機自己發。
+   漸快也一樣——伺服器不負責計時，每支手機依同一組參數各自推算，
+   算式相同、起點相同，結果就必然一致，而且加速時不會斷拍。
+   ========================================================= */
+
+const $ = id => document.getElementById(id);
+
+/* ---------- 伺服器位址 ----------
+   用瀏覽器開網頁時，自動連你開啟網頁的那台主機，不用設定。
+   包成 app 之後，網頁是從手機本機載入的，沒有「同一台主機」可以連，
+   所以必須指定伺服器網址。兩個方式擇一：
+     1. 在下面這行填上你的網址
+     2. 進 app 後在首頁點「伺服器設定」輸入（會記在手機裡）
+------------------------------------ */
+const SERVER_URL = '';   // 例如 'https://band-metronome-xxxx.onrender.com'
+
+// 是不是包成 app 在跑。Capacitor 會自己掛上 window.Capacitor；
+// 它的網址長得像 https://localhost，光看網址分不出來，所以要另外判斷。
+// 直接用檔案打開（file://）也當成 app，因為一樣沒有「同一台主機」可以連。
+const IS_APP = !!window.Capacitor || !/^https?:$/.test(location.protocol);
+
+function serverBase(){
+  // 瀏覽器開的一律連網頁所在的主機。「伺服器設定」在瀏覽器裡是藏起來的，
+  // 如果還去讀以前存過的位址，填錯的人會連不上、又找不到地方改回來。
+  if (!IS_APP) return location.origin;
+  const saved = localStorage.getItem('mmServer');
+  if (saved) return saved.replace(/\/+$/, '');
+  if (SERVER_URL) return SERVER_URL.replace(/\/+$/, '');
+  return location.origin;
+}
+
+// 包成 app 在跑、又還沒給過伺服器位址，就一定要先設定
+function needsServerSetup(){
+  if (IS_APP && !localStorage.getItem('mmServer') && !SERVER_URL) return true;
+  const base = serverBase();
+  return !/^https?:\/\//.test(base) || /^file:/.test(base);
+}
+
+const SUB_LIST = [1, 2, 3, 4, 5, 6, 7];
+
+// 速度範圍。一拍永遠是 60÷BPM 秒，也永遠當成四分音符來看。
+// 以前有二分／附點四分／八分的單位切換，後來拿掉，改成直接把範圍放寬。
+const BPM_MIN = 15, BPM_MAX = 600;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+// 音符長度（以四分音符為 1）對應的名稱，名稱放在語言字典（UI.dur）裡
+function durName(len){
+  for (const k in UI.dur) if (Math.abs(len - Number(k)) < 1e-9) return UI.dur[k];
+  return null;
+}
+
+// 一拍（四分音符）切成 k 等分之後，那一格是什麼音符。
+// 切不出標準音符長度的（三等分、五等分…）就叫幾連音。
+function subLabel(k){
+  const { len, tuplet } = subNotation(k);
+  return tuplet ? UI.tuplet(k) : durName(len);
+}
+
+// 一拍切成 k 等分之後，畫成樂譜上實際會寫的樣子。
+// 切得出標準音符就直接畫那個音符，不加連音記號：切兩等分 → 兩個八分音符。
+// 切不出來的才是連音，音符取「k 個加起來落在一拍到兩拍之間」的那種長度：
+//   切三等分 → 八分三連音；切五、六、七等分 → 十六分五、六、七連音。
+const isPow2 = x => Math.abs(Math.log2(x) - Math.round(Math.log2(x))) < 1e-9;
+function subNotation(k){
+  const exact = 1 / k;
+  if (isPow2(exact)) return { len: exact, tuplet: 0 };
+  return { len: Math.pow(2, Math.ceil(Math.log2(exact) - 1e-9)), tuplet: k };
+}
+
+// 音符長度 → 橫槓數
+const BEAMS = { 1:0, 0.5:1, 0.25:2 };
+
+function subNoteSvg(k){
+  const { len, tuplet } = subNotation(k);
+  const beams = BEAMS[len];
+  const HEAD_Y = 25, STEM_TOP = 5;
+  // 音符多的時候排緊一點，手機上才不會縮到看不清楚
+  const gap = beams ? (k >= 5 ? 6.6 : 7.5) : 10;
+  const x0 = 4.5;
+  let out = '';
+
+  for (let i = 0; i < k; i++){
+    const cx = x0 + i * gap;
+    out += '<ellipse cx="' + cx + '" cy="' + HEAD_Y + '" rx="3.1" ry="2.3" transform="rotate(-20 ' + cx + ' ' + HEAD_Y + ')" fill="currentColor"/>';
+    out += '<rect x="' + (cx + 2.3) + '" y="' + STEM_TOP + '" width="1.1" height="' + (HEAD_Y - 0.5 - STEM_TOP) + '" fill="currentColor"/>';
+  }
+
+  const xFirst = x0 + 2.3, xLast = x0 + (k - 1) * gap + 3.4;
+  for (let b = 0; b < beams; b++){
+    out += '<rect x="' + xFirst + '" y="' + (STEM_TOP + b * 3.4) + '" width="' + (xLast - xFirst) + '" height="2.2" fill="currentColor"/>';
+  }
+
+  const w = x0 + (k - 1) * gap + 4.5;
+  if (tuplet){
+    // 連音數字放在符頭下方
+    const mid = x0 + (k - 1) * gap / 2;
+    out += '<text x="' + mid + '" y="36.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="currentColor">' + tuplet + '</text>';
+  }
+  return '<svg class="subnote" viewBox="0 0 ' + w.toFixed(1) + ' 38" aria-hidden="true">' + out + '</svg>';
+}
+
+/* ---------- 語言 ----------
+   語言在最前面那段程式（換配色的那段）決定（window.MM_LANG），這裡只挑對應的字典。
+   注意：註解裡不要寫出 script 標籤的原文，測試是靠「最後一個 script 標籤」找程式碼的。
+   換語言會重新整理頁面，所以固定的文字載入時套一次就好。
+
+   UI    畫面上的標籤、按鈕、說明文字
+   LINES 對使用者說的話：提示、彩蛋、錯誤訊息
+
+   HTML 裡寫的是中文；英文版在載入時用 data-i18n 系列屬性換掉（屬性值是字典裡的鍵名）：
+     data-i18n        換文字
+     data-i18n-ph     換 placeholder
+     data-i18n-aria   換 aria-label
+   兩種語言的 key 要一模一樣，test-lines.js 會檢查。 */
+const LANG = (typeof window !== 'undefined' && window.MM_LANG === 'en') ? 'en' : 'zh';
+
+const UI_ZH = {
+  // 首頁
+  appName:     '同步節拍器',
+  tagline:     '同一個房間的人，耳機裡聽到同一拍。',
+  codePh:      '房號',
+  join:        '加入房間',
+  create:      '開一個新房間',
+  gateHint:    '用有線耳機最準。藍牙耳機會慢半拍，進房後可以自己微調。',
+  lookAria:    '外觀',
+  light:       '淺色',
+  dark:        '深色',
+  langAria:    '語言',
+  serverToggle:'伺服器設定',
+  serverPh:    'https://你的網址',
+  serverSave:  '存',
+  serverHint:  '用瀏覽器開網頁時不用設定。包成 app 之後才需要填，填的是你在 Render 上那個網址。',
+
+  // 房間上方
+  roomWord:    '房號',
+  muteAria:    '靜音',
+  muteOn:      '已靜音，點一下恢復聲音',
+  muteOff:     '點一下靜音',
+  open:        '開放',
+  locked:      '已鎖',
+  lockOwner:   '點一下切換',
+  roleOwner:   '房主',
+  roleMember:  '成員',
+  roleOwnerTip:'你是房主：可以上鎖，鎖上之後只有你能改設定',
+  roleMemberTip:'你是成員：房間沒上鎖時一樣可以改設定',
+  lockOther:   '只有房主能切換',
+  people:      n => n + ' 人',
+  syncing:     '校正中',
+  offline:     '連線中斷',
+
+  // 速度
+  bpmAria:     '速度，點一下直接輸入',
+  bpmInputAria:'輸入速度',
+  perMin:      v => '每分鐘 ' + v + ' 拍',
+  rampNow:     (target, bar) => '目標 ' + target + ' 第 ' + bar + ' 小節',
+  slower:      '慢一格',
+  faster:      '快一格',
+  tempoAria:   '速度',
+  tapAria:     '跟著節奏連點幾下，算出速度',
+  start:       '開始',
+  stop:        '停止',
+
+  // 拍子與重音
+  accHint:     '點格子切換重音，有重音時第一拍一定是重音',
+  accClear:    '全部取消',
+  beatsBefore: '每小節',
+  beatsAfter:  '拍',
+  beatsLess:   '減少拍數',
+  beatsMore:   '增加拍數',
+  cellAria:    (i, acc) => '第 ' + i + ' 拍' + (acc ? '，重音' : ''),
+  subAria:     (n, name) => '一拍分成 ' + n + ' 等分（' + name + '）',
+  dur:         { 1:'四分', 0.5:'八分', 0.25:'十六' },
+  tuplet:      n => ({ 1:'一', 2:'二', 3:'三', 4:'四', 5:'五', 6:'六', 7:'七' })[n] + '連',
+
+  // 耗時
+  calcTitle:   '耗時',
+  unset:       '未設定',
+  origTempo:   '原曲速度',
+  nowTempo:    '目前速度',
+  nowTempoAria:'目前速度，跟房間的速度連動',
+  origLen:     '原曲長度',
+  minUnit:     '分',
+  secUnit:     '秒',
+  minAria:     '原曲長度，分',
+  secAria:     '原曲長度，秒',
+  calcHint:    '「目前速度」跟房間的速度連動：拉上面的滑桿這裡會跟著變，改這裡也會改整個房間的速度。開了漸快訓練的話，算的是起始速度。原曲速度和長度只存在你自己的裝置裡。',
+  calcEmpty:   '填上原曲的速度和長度，就會算出用目前速度演奏全曲要多久。',
+  calcPct:     pct => '目前速度是原曲的 ' + pct + '%',
+  calcTotal:   '全曲約 ',
+  calcSame:    '跟原曲一樣長',
+  calcLonger:  t => '比原曲多 ' + t,
+  calcShorter: t => '比原曲少 ' + t,
+  calcDiff:    d => '（' + d + '）',
+
+  // 曲目
+  songsTitle:  '曲目',
+  songCount:   n => n + ' 首',
+  songNamePh:  '曲名',
+  songSave:    '存下目前設定',
+  songHint1:   '曲目存在你自己這支裝置裡。點一首會把速度、拍數、重音、細分、漸快設定一次套用到整個房間。',
+  songHint2:   '存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。',
+  songInfo:    (bpm, beats) => bpm + ' BPM · 每小節 ' + beats + ' 拍',
+  songLen:     t => ' · 全長 ' + t,
+  moveUp:      '往上移',
+  remove:      '刪除',
+  exportBtn:   '匯出',
+  importBtn:   '匯入',
+  songBoxPh:   '匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。',
+  applied:     name => '已套用「' + name + '」',
+  saved:       name => '已存下「' + name + '」',
+  copied:      '已複製到剪貼簿',
+  copyByHand:  '已產生文字，請手動複製',
+  pasteFirst:  '先把文字貼進下面的框',
+  added:       n => '加入了 ' + n + ' 首',
+  yes:         '是',
+  no:          '否',
+  cancel:      '取消',
+
+  // 預備拍
+  countTitle:     '預備拍',
+  countOnText:    '開始前先數預備拍',
+  countBarsBefore:'預備',
+  barsWord:       '小節',
+  countBarsLess:  '減少預備小節',
+  countBarsMore:  '增加預備小節',
+  countBarsAria:  '預備幾小節',
+  countLoopText:  '每個樂句前都重新數一次（循環練習）',
+  phraseBefore:   '樂句',
+  phraseLess:     '樂句少一小節',
+  phraseMore:     '樂句多一小節',
+  phraseAria:     '樂句幾小節',
+  countHint:      '預備拍每一拍都是重音、不響細分，畫面會顯示「預備」。循環時就是【預備】【樂句】【預備】【樂句】…一直重複；靜音訓練從樂句第一小節開始數，漸快只算樂句的小節。',
+  countOnceLabel: bars => '預備 ' + bars + ' 小節',
+  countLoopLabel: (bars, phrase) => '每 ' + phrase + ' 小節前預備 ' + bars,
+  countNow:       (k, all) => '預備 ' + k + '／' + all,
+
+  // 漸快訓練
+  rampTitle:   '漸快訓練',
+  off:         '關閉',
+  enable:      '啟用',
+  rampEvery:   '每',
+  rampBarsAdd: '小節，加',
+  rampTo:      '到',
+  barsLess:    '減少小節',
+  barsMore:    '增加小節',
+  stepLess:    '減少增量',
+  stepMore:    '增加增量',
+  targetAria:  '目標速度',
+  barsValAria: '每幾小節加速一次',
+  stepValAria: '每次加多少 BPM',
+  playValAria: '有聲小節數',
+  restValAria: '靜音小節數',
+  rampHint:    '速度由每支手機自己依同一組參數推算，所以加速的瞬間不會斷拍。到達目標之後就維持不變。',
+  rampLabel:   (bars, step, target) => '每 ' + bars + ' 小節 +' + step + ' 到 ' + target,
+
+  // 靜音訓練
+  muteTitle:   '靜音訓練',
+  muteEvery:   '每',
+  muteBarsRest:'小節，靜音',
+  muteBars:    '小節',
+  playLess:    '減少有聲小節',
+  playMore:    '增加有聲小節',
+  restLess:    '減少靜音小節',
+  restMore:    '增加靜音小節',
+  muteHint:    '靜音的那幾小節拍子照走，只是不出聲。畫面上的格子會用比較暗的方式繼續跑，讓你知道現在在第幾拍。這是練內在節奏最有效的方法之一——撐過去之後聲音回來，就知道自己有沒有跑掉。',
+  muteLabel:   (play, rest) => '每 ' + play + ' 小節靜音 ' + rest,
+
+  // 耳機延遲
+  latTitle:    '我的耳機延遲',
+  latAria:     '耳機延遲',
+  latLess:     '延遲減 5 毫秒',
+  latMore:     '延遲加 5 毫秒',
+  latHint1:    '如果你聽到的拍子比別人慢，往右拉，直到跟大家一致。有線耳機通常不用調，藍牙耳機大約在 120–250 之間。這個設定只影響你自己。',
+  latHint2:    '聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。長時間大音量會傷聽力，而且是不可逆的。',
+
+  // 最下面
+  share:       '複製邀請連結',
+  shareDone:   '已複製',
+  resetAudio:  '沒有聲音？重置音訊',
+  leave:       '離開房間',
+  audioInfo:   (state, n) => '音訊：' + state + (n ? ' 已重建 ' + n + ' 次' : ''),
+  audioNone:   '尚未啟動',
+};
+
+const UI_EN = {
+  appName:     'Sync Metronome',
+  tagline:     'Everyone in the room hears the same beat.',
+  codePh:      'CODE',          // 輸入框是超大字加寬字距，放得下的長度跟中文「房號」差不多
+  join:        'Join room',
+  create:      'Create a new room',
+  gateHint:    'Wired headphones are the most accurate. Bluetooth runs a little late — you can fine-tune it in the room.',
+  lookAria:    'Appearance',
+  light:       'Light',
+  dark:        'Dark',
+  langAria:    'Language',
+  serverToggle:'Server settings',
+  serverPh:    'https://your-url',
+  serverSave:  'Save',
+  serverHint:  'Not needed in a browser. Only the packaged app needs this: enter your Render URL.',
+
+  roomWord:    'Room',
+  muteAria:    'Mute',
+  muteOn:      'Muted — tap to turn sound back on',
+  muteOff:     'Tap to mute',
+  open:        'Open',
+  locked:      'Locked',
+  lockOwner:   'Tap to toggle',
+  roleOwner:   'Host',
+  roleMember:  'Member',
+  roleOwnerTip:'You’re the host: you can lock the room so only you can change settings',
+  roleMemberTip:'You’re a member: you can change settings while the room is unlocked',
+  lockOther:   'Only the host can change this',
+  people:      n => n + (n === 1 ? ' person' : ' people'),
+  syncing:     'Syncing',
+  offline:     'Offline',
+
+  bpmAria:     'Tempo — tap to type',
+  bpmInputAria:'Enter tempo',
+  perMin:      v => v + ' beats per minute',
+  rampNow:     (target, bar) => 'Target ' + target + ' · bar ' + bar,
+  slower:      'Slower',
+  faster:      'Faster',
+  tempoAria:   'Tempo',
+  tapAria:     'Tap along a few times to set the tempo',
+  start:       'Start',
+  stop:        'Stop',
+
+  accHint:     'Tap a cell to toggle accents. With any accent, beat 1 is always accented.',
+  accClear:    'Clear all',
+  beatsBefore: 'Beats',
+  beatsAfter:  'per bar',
+  beatsLess:   'Fewer beats',
+  beatsMore:   'More beats',
+  cellAria:    (i, acc) => 'Beat ' + i + (acc ? ', accented' : ''),
+  subAria:     (n, name) => 'Split each beat into ' + n + ' (' + name + ')',
+  dur:         { 1:'Quarter', 0.5:'Eighth', 0.25:'16th' },
+  tuplet:      n => ({ 3:'Triplet', 5:'Quintuplet', 6:'Sextuplet', 7:'Septuplet' })[n] || (n + '-tuplet'),
+
+  calcTitle:   'Duration',
+  unset:       'Not set',
+  origTempo:   'Original',
+  nowTempo:    'Current',
+  nowTempoAria:'Current tempo, linked to the room tempo',
+  origLen:     'Length',
+  minUnit:     'min',
+  secUnit:     'sec',
+  minAria:     'Original length, minutes',
+  secAria:     'Original length, seconds',
+  calcHint:    '“Current” is linked to the room tempo: move the slider and it follows, change it here and the whole room changes. With the speed trainer on, this uses the starting tempo. The original tempo and length stay on your device.',
+  calcEmpty:   'Enter the original tempo and length to see how long the whole song takes at the current tempo.',
+  calcPct:     pct => 'Current tempo is ' + pct + '% of the original',
+  calcTotal:   'Whole song ≈ ',
+  calcSame:    'same as the original',
+  calcLonger:  t => t + ' longer than the original',
+  calcShorter: t => t + ' shorter than the original',
+  calcDiff:    d => ' (' + d + ')',
+
+  songsTitle:  'Songs',
+  songCount:   n => n + (n === 1 ? ' song' : ' songs'),
+  songNamePh:  'Song name',
+  songSave:    'Save current settings',
+  songHint1:   'Songs are saved on this device. Tap one to apply its tempo, beats, accents, subdivision and speed trainer to the whole room.',
+  songHint2:   'Tempo saved: the original tempo from “Duration” if filled in, otherwise the current tempo — you’ll be asked if they differ. The length comes from “Duration”, and tapping a song fills both back in.',
+  songInfo:    (bpm, beats) => bpm + ' BPM · ' + beats + (beats === 1 ? ' beat' : ' beats') + ' per bar',
+  songLen:     t => ' · ' + t,
+  moveUp:      'Move up',
+  remove:      'Delete',
+  exportBtn:   'Export',
+  importBtn:   'Import',
+  songBoxPh:   'After exporting, text appears here. Send it to your bandmates — they paste it here and tap Import to get the same list.',
+  applied:     name => 'Applied “' + name + '”',
+  saved:       name => 'Saved “' + name + '”',
+  copied:      'Copied to clipboard',
+  copyByHand:  'Text is ready — please copy it manually',
+  pasteFirst:  'Paste the text into the box below first',
+  added:       n => 'Added ' + n + (n === 1 ? ' song' : ' songs'),
+  yes:         'Yes',
+  no:          'No',
+  cancel:      'Cancel',
+
+  countTitle:     'Count-in',
+  countOnText:    'Count in before starting',
+  countBarsBefore:'Count',
+  barsWord:       'bars',
+  countBarsLess:  'Fewer count-in bars',
+  countBarsMore:  'More count-in bars',
+  countBarsAria:  'Count-in bars',
+  countLoopText:  'Count in before every phrase (loop)',
+  phraseBefore:   'Phrase',
+  phraseLess:     'Shorter phrase',
+  phraseMore:     'Longer phrase',
+  phraseAria:     'Phrase length in bars',
+  countHint:      'Every count-in beat is accented (no subdivisions), and the screen shows “Count-in”. In loop mode it goes [count-in] [phrase] [count-in] [phrase]… forever. The gap trainer counts from the first bar of the phrase; the speed trainer counts phrase bars only.',
+  countOnceLabel: bars => bars + (bars === 1 ? ' bar' : ' bars'),
+  countLoopLabel: (bars, phrase) => bars + ' before every ' + phrase,
+  countNow:       (k, all) => 'Count-in ' + k + ' / ' + all,
+
+  rampTitle:   'Speed trainer',
+  off:         'Off',
+  enable:      'On',
+  rampEvery:   'Every',
+  rampBarsAdd: 'bars +',
+  rampTo:      'Up to',
+  barsLess:    'Fewer bars',
+  barsMore:    'More bars',
+  stepLess:    'Smaller step',
+  stepMore:    'Bigger step',
+  targetAria:  'Target tempo',
+  barsValAria: 'Bars between speed-ups',
+  stepValAria: 'BPM added each time',
+  playValAria: 'Playing bars',
+  restValAria: 'Silent bars',
+  rampHint:    'Every phone works out the tempo from the same settings, so the speed-ups never break the beat. Once it reaches the target, it stays there.',
+  rampLabel:   (bars, step, target) => '+' + step + ' every ' + bars + ' bars → ' + target,
+
+  muteTitle:   'Gap trainer',
+  muteEvery:   'Play',
+  muteBarsRest:'mute',
+  muteBars:    'bars',
+  playLess:    'Fewer playing bars',
+  playMore:    'More playing bars',
+  restLess:    'Fewer silent bars',
+  restMore:    'More silent bars',
+  muteHint:    'During the silent bars the beat keeps going, just without sound. The cells keep moving in a dimmer color so you know where you are. It’s one of the best ways to train your inner pulse — when the sound comes back, you’ll know if you drifted.',
+  muteLabel:   (play, rest) => 'Play ' + play + ', silent ' + rest,
+
+  latTitle:    'My headphone delay',
+  latAria:     'Headphone delay',
+  latLess:     'Delay −5 ms',
+  latMore:     'Delay +5 ms',
+  latHint1:    'If you hear the beat later than everyone else, drag right until you line up. Wired headphones usually need nothing; Bluetooth is typically around 120–250. This only affects you.',
+  latHint2:    'Can’t hear it? Try better-isolating headphones before turning the volume up. Long exposure to loud sound damages hearing permanently.',
+
+  share:       'Copy invite link',
+  shareDone:   'Copied',
+  resetAudio:  'No sound? Reset audio',
+  leave:       'Leave room',
+  audioInfo:   (state, n) => 'Audio: ' + state + (n ? ' · rebuilt ' + n + (n === 1 ? ' time' : ' times') : ''),
+  audioNone:   'not started',
+};
+
+// 所有對使用者說的話集中在這裡，好改
+const LINES_ZH = {
+  emptyCode:  '你加入了一個空集合。',
+  shortCode:  n => {
+    const idiom = { 1:'憑城借一', 2:'君命無二', 3:'觀隅反三' }[n];
+    return idiom ? idiom + '（房號有四個字）' : '房號有四個字。';
+  },
+  noRoom:     '你為什麼知道這間房號...',
+  lockSide:   '鎖沒有辦法從這一側打開。',
+  nowOwner:   '房主離開了，現在由你接手。',
+  denied: [
+    '這個按鈕現在不屬於你。',
+    '你按到了，但是沒有用。',
+    '再按一次結果也一樣。',
+    '別再戳了，很癢。',
+  ],
+  tooFast:    n => n + ' 已經是上限。再快就不是節拍器的問題了。',
+  tooSlow:    n => n + ' 已經是下限。再慢建議改用日曆。',
+  typedSlow:  '有阿基里斯正在追趕烏龜',
+  typedFast:  '拿著鏡子用光速跑，能不能看見鏡中的自己呢？',
+  pickTempo:  '原曲速度跟目前速度不一樣，這首要用哪個速度存？',
+  noLength:   '還沒填長度，不填長度直接存？',
+  sameLength: t => '長度還是上一首的 ' + t + '，跟上一首一樣長嗎？',
+  tooMany:    '你哪裡找到這麼酷的曲子拍數超過12拍，要不貼給開發者聽聽？',
+  tooFew:     '希望每天都是星期天～希望每拍都是第一拍～。',
+  allAccent:  '全部都是重音，等於全部都不是。',
+  keepFirst:  '你設定了其他拍是重音，安能辨誰是小節第一拍？',
+  mute:       '此時無聲勝有聲。',
+  unmute:     '兩岸猿聲啼不住。',
+  rampDown:   n => '目標比現在的 ' + n + ' 還慢，那不叫漸快。',
+  noName:     '每把斬魄刀都有名字，曲子也一樣',
+  badImport:  'Gibberish。',
+  nothingNew: '閣下看來是會去超市買340盒雞蛋的人。',
+  emptyList:  '清單是空的，匯出來當然也是空的。',
+  noSongs:    '還沒有曲目。存一首試試。',
+  resynced:   '回來了。已重新對時。',
+  addHome:    '按分享鈕選「加入主畫面」，全螢幕比較不會誤觸。',
+  noServer:   '還沒設定伺服器位址。',
+  cut:        '聲音被中斷了。點一下接回。',
+  reconnected:'接回來了。',
+  rebuilt:    '音訊已重建。',
+  deadAudio:  '音訊沒反應，已經自己重建一次。',
+};
+
+// 英文版。彩蛋是草稿，還要再跟作者討論怎麼改。
+const LINES_EN = {
+  emptyCode:  'You just joined the empty set.',
+  shortCode:  n => {
+    const line = { 1:'One is the loneliest number.', 2:'It takes two to tango.', 3:'Third time’s the charm.' }[n];
+    return line ? line + ' (Room codes have four characters.)' : 'Room codes have four characters.';
+  },
+  noRoom:     'How do you even know this room code...',
+  lockSide:   'This lock can’t be opened from this side.',
+  nowOwner:   'The host left. You’re in charge now.',
+  denied: [
+    'This button isn’t yours right now.',
+    'You pressed it. Nothing happened.',
+    'Pressing again won’t change that.',
+    'Stop poking, it tickles.',
+  ],
+  tooFast:    n => n + ' is the limit. Any faster and it’s not the metronome’s problem.',
+  tooSlow:    n => n + ' is the minimum. Any slower, try a calendar.',
+  typedSlow:  'Achilles is still chasing the tortoise',
+  typedFast:  'If you ran at the speed of light holding a mirror, could you still see yourself?',
+  pickTempo:  'The original tempo and the current tempo are different. Which one should this song use?',
+  noLength:   'No length yet. Save without one?',
+  sameLength: t => 'The length is still ' + t + ' from the last song. Is this one the same length?',
+  tooMany:    'Where did you find a song with more than 12 beats a bar? Send it to the developer.',
+  tooFew:     'If only every day were Sunday, and every beat were beat one.',
+  allAccent:  'When every beat is accented, none of them are.',
+  keepFirst:  'With other beats accented, who could tell which one starts the bar?',
+  mute:       'Silence speaks louder than sound.',
+  unmute:     'And the sound comes rushing back.',
+  rampDown:   n => 'The target is slower than the current ' + n + '. That’s not speeding up.',
+  noName:     'Every Zanpakutō has a name. So does every song.',
+  badImport:  'Gibberish.',
+  nothingNew: 'Nothing new here — you already have all of these.',
+  emptyList:  'The list is empty, so the export is empty too.',
+  noSongs:    'No songs yet. Try saving one.',
+  resynced:   'Welcome back. Re-synced.',
+  addHome:    'Tap Share and choose “Add to Home Screen” — full screen means fewer accidental taps.',
+  noServer:   'No server address set.',
+  cut:        'Sound was interrupted. Tap to reconnect.',
+  reconnected:'Reconnected.',
+  rebuilt:    'Audio rebuilt.',
+  deadAudio:  'Audio stopped responding, so it was rebuilt automatically.',
+};
+
+const UI = LANG === 'en' ? UI_EN : UI_ZH;
+const LINES = LANG === 'en' ? LINES_EN : LINES_ZH;
+
+// 把 HTML 裡寫死的中文換成目前的語言。中文版不用動。
+function applyI18n(){
+  if (LANG === 'zh') return;
+  const put = (attr, apply) => {
+    for (const el of document.querySelectorAll('[' + attr + ']')){
+      const v = UI[el.getAttribute(attr)];
+      if (typeof v === 'string') apply(el, v);
+    }
+  };
+  put('data-i18n',      (el, v) => { el.textContent = v; });
+  put('data-i18n-ph',   (el, v) => { el.placeholder = v; });
+  put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); });
+}
+
+let deniedTurn = 0;
+function denied(){
+  toast(LINES.denied[deniedTurn++ % LINES.denied.length]);
+  return false;
+}
+
+/* ---------- 1. 時鐘 ---------- */
+
+// performance 的時鐘不會被系統校時打斷，比 Date.now() 穩定
+const nowLocal = () => performance.timeOrigin + performance.now();
+
+let offset = 0;      // 伺服器時間 ≈ 本機時間 + offset
+let synced = false;
+
+/* ---------- 2. 連線 ---------- */
+
+let sock = null, wantCode = null, retry = 0;
+const st = {
+  code:null, bpm:90, beats:4, accents:[1,0,0,0], sub:1,
+  ramp:{ on:false, bars:4, step:2, target:160 },
+  mute:{ on:false, play:3, rest:1 },
+  count:{ on:false, bars:1, loop:false, phrase:4 },   // 預備拍（loop：每個樂句前都重新數）
+  locked:false, isOwner:false,
+  running:false, startAt:0, people:1,
+};
+
+function connect(){
+  if (needsServerSetup()){ showServerBox(true); return; }
+  sock = new WebSocket(serverBase().replace(/^http/, 'ws'));
+
+  sock.onopen = () => {
+    retry = 0;
+    startSync(12);
+    if (wantCode) sock.send(JSON.stringify({ t:'join', code: wantCode }));
+  };
+  sock.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.t === 'time')   return onTimeReply(m);
+    if (m.t === 'state')  return onState(m);
+    if (m.t === 'tick')   return onTick();
+    if (m.t === 'denied') return denied();
+    // 伺服器帶 code 的話用自己語言的句子；舊版伺服器只有 msg，就照原文顯示
+    if (m.t === 'error'){ backToGate(); return showError(LINES[m.code] || m.msg, true); }
+  };
+  sock.onclose = () => {
+    setSyncChip(UI.offline, true);
+    retry++;
+    setTimeout(connect, Math.min(800 * retry, 5000));
+  };
+}
+
+function send(obj){
+  if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(obj));
+}
+
+// 伺服器每兩秒送一次心跳。手機切到背景時計時器會被凍住，
+// 但收到網路訊息通常還是會醒一下，借這個機會做該做的檢查。
+function onTick(){
+  checkAudio();
+  checkStall();
+  if (interrupted) tryResume(false);
+  if (document.hidden) keepBgInPhase();
+}
+
+const canControl = () => !st.locked || st.isOwner;
+
+function guard(){
+  if (canControl()) return true;
+  return denied();
+}
+
+let toastTimer = null;
+function toast(msg){
+  $('roomMsg').textContent = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { $('roomMsg').textContent = ''; }, 2500);
+}
+
+/* ---------- 3. 對時 ---------- */
+// 做法跟電腦自動校時一樣：來回打幾次招呼，量往返時間，推算時鐘落差。
+
+let probes = [], probeLeft = 0, probeTimer = null;
+
+function startSync(times){
+  probes = [];
+  probeLeft = times;
+  clearInterval(probeTimer);
+  probeTimer = setInterval(() => {
+    if (probeLeft-- <= 0){ clearInterval(probeTimer); finishSync(); return; }
+    send({ t:'time', c: nowLocal() });
+  }, 70);
+}
+
+function onTimeReply(m){
+  const back = nowLocal();
+  probes.push({ rtt: back - m.c, off: m.s - (m.c + back) / 2 });
+}
+
+function finishSync(){
+  if (!probes.length) return;
+  probes.sort((a,b) => a.rtt - b.rtt);          // 往返越快的樣本越可信
+  const best = probes.slice(0, Math.max(3, Math.ceil(probes.length / 3)));
+  const offs = best.map(p => p.off).sort((a,b) => a-b);
+  offset = offs[Math.floor(offs.length / 2)];   // 取中位數，避開離群值
+  synced = true;
+  setSyncChip('±' + Math.round(best[0].rtt / 2) + 'ms');
+}
+
+setInterval(() => { if (sock && sock.readyState === WebSocket.OPEN) startSync(6); }, 30000);
+
+function setSyncChip(text, warn){
+  const el = $('sync');
+  el.textContent = text;
+  el.classList.toggle('warn', !!warn);
+}
+
+/* ---------- 4. 聲音 ---------- */
+// 三種音色：重音、一般拍、細分。
+// 每一聲都是「音頭（正弦波）＋ 一小撮雜訊」。純音在鼓聲裡很容易被蓋掉，
+// 加一點雜訊會讓它變成「喀」而不是「嗶」，穿透力差很多。
+
+let ctx = null, master = null, limiter = null, noiseBuf = null;
+// 音量交給手機的音量鍵，這裡只有開或關（每個人自己的，存在自己裝置裡）
+let muted = localStorage.getItem('mmMute') === '1';
+
+// first 是「有設重音時的第一拍」：音高更高、多一個高八度的泛音、尾音拉長，
+// 聽起來是「叮」而不是「喀」，一耳就分得出小節從哪裡開始。
+const VOICES = {
+  first:  { freq:2637, gain:0.85, dur:0.110, noise:0.25, band:5000, partial:{ ratio:2, gain:0.35 } },
+  accent: { freq:2100, gain:1.00, dur:0.055, noise:0.60, band:3000 },
+  beat:   { freq:1400, gain:0.80, dur:0.050, noise:0.38, band:2200 },
+  sub:    { freq:1050, gain:0.30, dur:0.028, noise:0.10, band:1800 },
+};
+
+// 固定輸出增益，等於舊版音量滑桿的預設值 85%
+const OUT_GAIN = 0.85 * 1.15;
+const outGain = () => muted ? 0 : OUT_GAIN;
+
+async function ensureAudio(){
+  if (!ctx){
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // iOS：告訴系統這是播放用途，靜音鍵比較不會把聲音切掉
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+
+    // 限幅器：把超出上限的峰值壓住。有了它才能把整體音量推大而不破音。
+    limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -2;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.001;
+    limiter.release.value = 0.06;
+
+    master = ctx.createGain();
+    master.gain.value = outGain();
+    master.connect(limiter).connect(ctx.destination);
+
+    const len = Math.floor(ctx.sampleRate * 0.1);
+    noiseBuf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+
+    // 掛一個聽不見的持續音源，避免手機把音訊通道收回去
+    const keep = ctx.createOscillator();
+    const kg = ctx.createGain();
+    kg.gain.value = 0.0001;
+    keep.connect(kg).connect(ctx.destination);
+    keep.start();
+
+    watchAudioState();
+    loadCountSample();
+  }
+  if (ctx.state !== 'running') await ctx.resume();
+}
+
+// 把嵌在網頁裡的預備拍錄音解碼成這台裝置的取樣率。
+// 每次建新的音訊引擎（包括「重置音訊」）都要重來一次，舊的 AudioBuffer 不能跨引擎用。
+function loadCountSample(){
+  countBuf = null; countWave = null;
+  const myCtx = ctx;
+  let bytes;
+  try {
+    const bin = atob(COUNT_SAMPLE_WAV);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  } catch(e){ return; }
+  const done = buf => {
+    if (ctx !== myCtx || !buf) return;              // 解碼期間音訊引擎被換掉了
+    countBuf = buf;
+    countWave = { sr: buf.sampleRate, data: buf.getChannelData(0) };
+    WAVES = null; bgSig = '';                       // 背景音軌下次重算時換成錄音
+  };
+  try {
+    // 舊版 Safari 只有 callback 寫法，新的是 Promise，兩種都接
+    const p = ctx.decodeAudioData(bytes.buffer, done, () => {});
+    if (p && p.then) p.then(done, () => {});
+  } catch(e){}
+}
+
+function watchAudioState(){
+  ctx.onstatechange = () => { checkAudio(); if (interrupted) tryResume(true); };
+}
+
+function voice(at, kind){
+  // 預備拍用錄好的敲擊聲；還沒解碼好的話先用重音的聲音頂著
+  if (kind === 'count'){
+    if (countBuf){
+      const s = ctx.createBufferSource();
+      s.buffer = countBuf;
+      s.connect(master);
+      s.start(at);
+      queued.push({ at, nodes:[s] });
+      return;
+    }
+    kind = 'accent';
+  }
+  const v = VOICES[kind];
+  const nodes = [];
+
+  const o = ctx.createOscillator();
+  const og = ctx.createGain();
+  o.frequency.setValueAtTime(v.freq, at);
+  og.gain.setValueAtTime(0.0001, at);
+  og.gain.exponentialRampToValueAtTime(v.gain, at + 0.0015);
+  og.gain.exponentialRampToValueAtTime(0.0001, at + v.dur);
+  o.connect(og).connect(master);
+  o.start(at); o.stop(at + v.dur + 0.01);
+  nodes.push(o);
+
+  if (v.partial){
+    const p = ctx.createOscillator();
+    const pg = ctx.createGain();
+    p.frequency.setValueAtTime(v.freq * v.partial.ratio, at);
+    pg.gain.setValueAtTime(0.0001, at);
+    pg.gain.exponentialRampToValueAtTime(v.partial.gain, at + 0.0015);
+    pg.gain.exponentialRampToValueAtTime(0.0001, at + v.dur);
+    p.connect(pg).connect(master);
+    p.start(at); p.stop(at + v.dur + 0.01);
+    nodes.push(p);
+  }
+
+  if (v.noise > 0){
+    const n = ctx.createBufferSource();
+    const bp = ctx.createBiquadFilter();
+    const ng = ctx.createGain();
+    n.buffer = noiseBuf;
+    bp.type = 'bandpass';
+    bp.frequency.value = v.band;
+    bp.Q.value = 1.1;
+    ng.gain.setValueAtTime(v.noise, at);
+    ng.gain.exponentialRampToValueAtTime(0.0001, at + v.dur * 0.55);
+    n.connect(bp).connect(ng).connect(master);
+    n.start(at); n.stop(at + v.dur + 0.01);
+    nodes.push(n);
+  }
+  queued.push({ at, nodes });
+}
+
+/* ---------- 4b. 把整段節拍算成一段音訊 ---------- */
+// 背景播放不能用「一拍建一組節點」的做法：六十秒就是好幾百聲、
+// 每聲五個節點，Safari 對同時存在的音訊節點有上限，超過的不會報錯，
+// 就只是不出聲。改成整段算成一個緩衝區，用一個節點播完。
+
+// RBJ 帶通濾波器，跟 BiquadFilterNode 的 bandpass 是同一組係數
+function bandpass(input, f0, Q, sr){
+  const w0 = 2 * Math.PI * f0 / sr, al = Math.sin(w0) / (2 * Q);
+  const b0 = al, b2 = -al;
+  const a0 = 1 + al, a1 = -2 * Math.cos(w0), a2 = 1 - al;
+  const out = new Float32Array(input.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  for (let i = 0; i < input.length; i++){
+    const x0 = input[i];
+    const y0 = (b0 * x0 + b2 * x2 - a1 * y1 - a2 * y2) / a0;
+    out[i] = y0; x2 = x1; x1 = x0; y2 = y1; y1 = y0;
+  }
+  return out;
+}
+
+// 把一聲「喀」算成一小段波形。內容跟即時播放那條路徑一樣：
+// 正弦音頭 ＋ 一小撮帶通雜訊，兩者都指數衰減。
+function makeWave(kind, sr){
+  const v = VOICES[kind];
+  const len = Math.ceil((v.dur + 0.01) * sr);
+  const out = new Float32Array(len);
+  const ATK = 0.0015;
+
+  for (let i = 0; i < len; i++){
+    const t = i / sr;
+    if (t > v.dur) break;
+    const env = t < ATK
+      ? (t / ATK) * v.gain
+      : v.gain * Math.pow(0.0001 / v.gain, (t - ATK) / (v.dur - ATK));
+    out[i] = Math.sin(2 * Math.PI * v.freq * t) * env;
+    if (v.partial){
+      const penv = t < ATK
+        ? (t / ATK) * v.partial.gain
+        : v.partial.gain * Math.pow(0.0001 / v.partial.gain, (t - ATK) / (v.dur - ATK));
+      out[i] += Math.sin(2 * Math.PI * v.freq * v.partial.ratio * t) * penv;
+    }
+  }
+
+  if (v.noise > 0){
+    const raw = new Float32Array(len);
+    for (let i = 0; i < len; i++) raw[i] = Math.random() * 2 - 1;
+    const f = bandpass(raw, v.band, 1.1, sr);
+    const d = v.dur * 0.55;
+    for (let i = 0; i < len; i++){
+      const t = i / sr;
+      if (t > d) break;
+      out[i] += f[i] * v.noise * Math.pow(0.0001 / v.noise, t / d);
+    }
+  }
+  return out;
+}
+
+// 預備拍的錄音（解碼後的波形）。解碼好之前是 null，這時預備拍先用重音的聲音。
+let countWave = null;   // { sr, data }：背景整段合成用
+let countBuf = null;    // AudioBuffer：前景逐拍播放用
+
+let WAVES = null;
+function waves(sr){
+  if (!WAVES || WAVES.sr !== sr){
+    WAVES = { sr, first: makeWave('first', sr), accent: makeWave('accent', sr),
+              beat: makeWave('beat', sr), sub: makeWave('sub', sr) };
+  }
+  // 預備拍：錄音解碼好了（而且取樣率對得上）就用錄音，不然用重音
+  WAVES.count = countWave && countWave.sr === sr ? countWave.data : WAVES.accent;
+  return WAVES;
+}
+
+// 把 [fromRel, fromRel+seconds) 這段時間內該響的全部疊進一個緩衝區。
+// wrap = true 時，尾巴超出去的部分繞回開頭，這樣循環播放才不會被切掉。
+function renderSpan(fromRel, seconds, wrap){
+  const sr = ctx.sampleRate;
+  const len = Math.max(1, Math.round(seconds * sr));
+  const buf = ctx.createBuffer(1, len, sr);
+  const out = buf.getChannelData(0);
+  const W = waves(sr);
+
+  let n = sched.firstAtOrAfter(fromRel), guard = 0;
+  while (guard++ < 50000){
+    const t = sched.timeOf(n) - fromRel;
+    if (t >= seconds) break;
+    const kind = beatInfo(n).kind;
+    if (kind){
+      const w = W[kind];
+      const off = Math.round(t * sr);
+      for (let i = 0; i < w.length; i++){
+        const j = off + i;
+        if (j < 0) continue;
+        if (j < len) out[j] += w[i];
+        else if (wrap) out[j - len] += w[i];
+      }
+    }
+    n++;
+  }
+  return buf;
+}
+
+/* ---------- 5. 拍點時刻表 ---------- */
+// 沒有漸快時，第 n 個細分就落在 n × 每一格的長度。
+// 有漸快時，把時間切成一段一段：每段 bars 個小節速度固定，下一段加 step，
+// 到 target 就停住不再加。第 n 個細分的時刻 = 前面幾段的總長 + 這段內的位置。
+// 這串算式只吃參數，不吃時鐘，所以每支手機算出來的結果完全一樣。
+
+function makeSchedule(){
+  // 開了預備拍就換另一套算法（見 makeCountSchedule）；沒開的話底下跟原本一模一樣
+  if (st.count && st.count.on) return makeCountSchedule();
+  const bpm0 = grid.bpm;
+  const beats = st.beats;
+  const sub = st.sub;
+  const R = st.ramp || { on:false };
+  const on = !!R.on && R.step > 0 && R.target > bpm0;
+  const segBeats = Math.max(1, (R.bars || 4) * beats); // 一段有幾個主拍
+  const bpmOf = k => (on ? Math.min(R.target, bpm0 + k * R.step) : bpm0);
+
+  const cum = [0];                       // 每段開頭距離第一拍多少秒
+  function T(k){
+    while (cum.length <= k){
+      const j = cum.length - 1;
+      cum.push(cum[j] + segBeats * 60 / bpmOf(j));
+    }
+    return cum[k];
+  }
+
+  const M = st.mute || { on:false };
+  const api = {
+    sub, on,
+    // 背景音軌怎麼循環：沒開漸快就是週期性的。
+    // 一個週期要包含完整的靜音循環，不然循環接縫會把「有聲幾小節、靜音幾小節」切亂。
+    periodic: !on,
+    periodFrom: 0,
+    periodLen: beats * 60 / bpm0 * (M.on ? Math.max(1, M.play + M.rest) : 1),
+    barKind(g){ return { countIn:false, phraseBar:g }; },
+    segOf(n){ return on ? Math.floor(Math.floor(n / sub) / segBeats) : 0; },
+    bpmAt(n){ return bpmOf(api.segOf(n)); },
+    barAt(n){ return Math.floor(Math.floor(n / sub) / beats) + 1; },
+    timeOf(n){
+      const b = Math.floor(n / sub), f = (n % sub) / sub;
+      if (!on) return (b + f) * 60 / bpm0;
+      const k = Math.floor(b / segBeats);
+      return T(k) + (b - k * segBeats + f) * 60 / bpmOf(k);
+    },
+    // 第一個「時刻不早於 tRel」的細分編號
+    firstAtOrAfter(tRel){
+      let n;
+      if (!on){
+        n = Math.ceil(tRel * bpm0 * sub / 60);
+      } else {
+        let k = 0;
+        while (k < 500000 && T(k + 1) <= tRel) k++;
+        n = k * segBeats * sub + Math.ceil(Math.max(0, tRel - T(k)) * bpmOf(k) / 60 * sub);
+      }
+      if (!Number.isFinite(n) || n < 0) n = 0;
+      let guard = 0;
+      while (n > 0 && api.timeOf(n - 1) >= tRel && guard++ < 1000) n--;
+      guard = 0;
+      while (api.timeOf(n) < tRel && guard++ < 1000) n++;
+      return n;
+    },
+  };
+  return api;
+}
+
+// 有預備拍時的時刻表。時間軸是一小節一小節排的，每小節是下面其中一種：
+//   預備拍小節：只數主拍，不算進樂句，也不算進漸快
+//   樂句小節：  照常發聲；靜音訓練從樂句的第一小節開始數
+// 循環模式是【預備 cin 小節】【樂句 phrase 小節】一直重複；不循環就只在最前面預備一次。
+// 漸快只數樂句小節，所以循環時每一輪會接著上一輪的速度繼續加；
+// 預備拍用「下一個樂句小節」的速度來數，數完剛好接得上。
+// 跟上面一樣只吃參數、不吃時鐘，每支手機算出來完全一樣。
+function makeCountSchedule(){
+  const bpm0 = grid.bpm;
+  const beats = st.beats;
+  const sub = st.sub;
+  const perBar = beats * sub;
+  const R = st.ramp || { on:false };
+  const rampOn = !!R.on && R.step > 0 && R.target > bpm0;
+  const rampBars = Math.max(1, R.bars || 4);
+  const C = st.count;
+  const cin = Math.max(1, Math.round(C.bars) || 1);
+  const loop = !!C.loop;
+  const phrase = Math.max(1, Math.round(C.phrase) || 4);
+  const M = st.mute || { on:false };
+
+  const tempoOfMusic = m => rampOn ? Math.min(R.target, bpm0 + Math.floor(m / rampBars) * R.step) : bpm0;
+
+  // 第 g 小節是什麼：music = 這是第幾個樂句小節（預備拍小節給的是下一個樂句小節）
+  function barKind(g){
+    if (loop){
+      const block = cin + phrase, pos = g % block, round = Math.floor(g / block);
+      if (pos < cin) return { countIn:true, countBar:pos, music:round * phrase, phraseBar:null };
+      return { countIn:false, music:round * phrase + pos - cin, phraseBar:pos - cin };
+    }
+    if (g < cin) return { countIn:true, countBar:g, music:0, phraseBar:null };
+    return { countIn:false, music:g - cin, phraseBar:g - cin };
+  }
+  const tempoOfBar = g => tempoOfMusic(barKind(g).music);
+
+  const cum = [0];                       // 每小節開頭距離第一拍多少秒
+  function T(g){
+    while (cum.length <= g){
+      const j = cum.length - 1;
+      cum.push(cum[j] + beats * 60 / tempoOfBar(j));
+    }
+    return cum[g];
+  }
+  const barOf = n => Math.floor(n / perBar);
+
+  const api = {
+    sub, on: rampOn,
+    // 背景音軌：沒開漸快的話，循環模式從頭就是週期性的（一輪 = 預備＋樂句）；
+    // 只預備一次的話，數完預備拍之後才開始週期性，一個週期要包含完整的靜音循環。
+    periodic: !rampOn,
+    periodFrom: loop ? 0 : T(cin),
+    periodLen: loop ? T(cin + phrase)
+                    : beats * 60 / bpm0 * (M.on ? Math.max(1, M.play + M.rest) : 1),
+    barKind,
+    segOf(n){ return rampOn ? Math.floor(barKind(barOf(n)).music / rampBars) : 0; },
+    bpmAt(n){ return tempoOfBar(barOf(n)); },
+    barAt(n){ return barKind(barOf(n)).music + 1; },
+    timeOf(n){
+      const g = barOf(n);
+      return T(g) + (n - g * perBar) / sub * 60 / tempoOfBar(g);
+    },
+    firstAtOrAfter(tRel){
+      if (!(tRel > 0)) return 0;
+      while (cum[cum.length - 1] <= tRel && cum.length < 2000000) T(cum.length);
+      let lo = 0, hi = cum.length - 1;               // 找最後一個開頭不晚於 tRel 的小節
+      while (lo < hi){
+        const mid = (lo + hi + 1) >> 1;
+        if (cum[mid] <= tRel) lo = mid; else hi = mid - 1;
+      }
+      let n = lo * perBar + Math.ceil((tRel - cum[lo]) * tempoOfBar(lo) / 60 * sub - 1e-9);
+      if (!Number.isFinite(n) || n < 0) n = 0;
+      let guard = 0;
+      while (n > 0 && api.timeOf(n - 1) >= tRel && guard++ < 1000) n--;
+      guard = 0;
+      while (api.timeOf(n) < tRel && guard++ < 1000) n++;
+      return n;
+    },
+  };
+  return api;
+}
+
+// 每一格該發什麼音，只有這裡決定。
+// 前景的逐拍排程和背景的整段合成都叫這個函式，兩邊才不會各算各的。
+function beatInfo(n){
+  const sub = sched.sub;
+  const isMain = n % sub === 0;
+  const idx = Math.floor(n / sub);
+  const beatNo = ((idx % st.beats) + st.beats) % st.beats;
+  const bar = Math.floor(idx / st.beats);
+
+  // 預備拍小節：只數主拍，每一拍都用預備拍自己的聲音（錄好的小鼓邊敲擊，見 COUNT_SAMPLE_WAV），
+  // 不響細分，也不受靜音訓練影響
+  const bk = sched.barKind ? sched.barKind(bar) : { countIn:false, phraseBar:bar };
+  if (bk.countIn) return { kind: isMain ? 'count' : null, beatNo, isMain, bar, countIn:true };
+
+  // 有重音時第一拍一定是重音（toggleAccent 和伺服器都會保證），而且用自己的音色
+  let kind = !isMain ? 'sub'
+    : !st.accents[beatNo] ? 'beat'
+    : beatNo === 0 ? 'first' : 'accent';
+
+  // 靜音訓練：每 play 小節有聲，接著 rest 小節不發聲，循環。
+  // 拍點時刻完全不變，只是這幾小節不出聲，所以回來的時候還是對齊的。
+  // 有預備拍時從樂句的第一小節開始數，循環練習時每一輪都對得齊。
+  const M = st.mute;
+  if (M && M.on){
+    const cycle = M.play + M.rest;
+    if (cycle > 0 && (bk.phraseBar % cycle) >= M.play) kind = null;
+  }
+  return { kind, beatNo, isMain, bar, countIn:false };
+}
+
+/* ---------- 6. 排程 ---------- */
+// 每 100 毫秒醒來一次，把接下來 0.4 秒內該響的都先排好。
+
+const LOOKAHEAD = 0.4;        // 平常先排好接下來 0.4 秒
+const REANCHOR = 0.015;
+
+let grid = { startAt:0, bpm:0 };
+let sched = null;
+let cursor = null;     // null 代表「還沒算過從第幾個細分開始」
+let anchor = null;     // 第 0 個細分在音訊時鐘上的位置（秒）
+let queued = [];
+let timers = [];
+let myLatency = Number(localStorage.getItem('mmLatency') || 0);
+
+// 設定一改，就把還沒響的聲音取消掉，重新排。
+// 不這樣做的話，已經排進去的舊設定會再響 0.4 秒，聽起來像打嗝。
+function flush(){
+  if (ctx){
+    const now = ctx.currentTime;
+    for (const q of queued){
+      if (q.at > now) for (const n of q.nodes){ try { n.stop(now); } catch(e){} }
+    }
+  }
+  queued = [];
+  timers.forEach(clearTimeout);
+  timers = [];
+  cursor = null;
+  sched = null;
+  clearNow();
+}
+
+function resetGrid(){
+  grid = { startAt: st.startAt, bpm: st.bpm };
+  anchor = null;
+}
+
+// 把「伺服器上的第一拍時刻」換算到這台裝置的音訊時鐘上。
+// 減掉自己的耳機延遲 = 提早發聲，抵銷藍牙的慢半拍。
+function whereIsBeatZero(){
+  return ctx.currentTime + ((grid.startAt - offset - myLatency) - nowLocal()) / 1000;
+}
+
+// 把「接下來這段時間該響的聲音」都排進音訊引擎。
+// 平常只排 0.4 秒；要切到背景之前改排一整分鐘，
+// 因為手機一旦把網頁收起來，就不會再叫醒這段程式了。
+function pump(ahead, maxEvents){
+  if (!st.running || !ctx || ctx.state !== 'running' || !synced) return;
+
+  // 基準點固定住，拍子間隔才會完全平均。
+  // 只有在真的漂掉時（重新對時、或時鐘慢慢跑掉）才重抓一次。
+  const want = whereIsBeatZero();
+  if (anchor === null || Math.abs(want - anchor) > REANCHOR) anchor = want;
+  if (!sched) sched = makeSchedule();
+
+  const audioNow = ctx.currentTime;
+  queued = queued.filter(q => q.at > audioNow - 0.5);
+
+  if (cursor === null) cursor = sched.firstAtOrAfter(audioNow - anchor);
+
+  const quiet = document.hidden;   // 沒人在看的時候就不用排畫面動畫
+  let n = cursor, made = 0, spin = 0;
+  while (anchor + sched.timeOf(n) < audioNow + ahead
+         && made < maxEvents && spin++ < maxEvents * 4){
+    const at = anchor + sched.timeOf(n);
+    if (at > audioNow + 0.005 && at >= holdUntil){
+      const b = beatInfo(n);
+      if (b.kind) voice(at, b.kind);
+      if (b.isMain && !quiet) markBeat(at, b.beatNo, n, !b.kind, b.countIn);
+      made++;
+    }
+    n++;
+  }
+  cursor = n;
+}
+
+/* ---------- 6b. 背景音軌 ---------- */
+// 前景：一拍建一組節點，隨時可以取消重排，反應最快。
+// 背景：改用整段算好的音訊，只掛一個節點。
+//       背景時計時器會被降頻，逐拍排程根本來不及，
+//       而且一次建太多節點會撞到 Safari 的上限而默默不出聲。
+
+let bgSource = null;
+let bgBuf = null, bgSig = '';   // 算好的音訊重複使用，只有設定變了才重算
+let bgAnchor = null;            // 啟動這段音軌時用的基準點
+let bgLastStart = 0;
+let holdUntil = 0;   // 這個時刻之前由背景音軌負責，節點排程不要重複發聲
+
+function trackSig(){
+  return [grid.bpm, st.beats, st.accents.join(''), st.sub,
+          st.ramp.on ? [st.ramp.bars, st.ramp.step, st.ramp.target].join('/') : 'off',
+          st.mute.on ? [st.mute.play, st.mute.rest].join('/') : 'off',
+          st.count && st.count.on ? [st.count.bars, st.count.loop ? st.count.phrase : 'once'].join('/') : 'off'
+         ].join('|');
+}
+
+function stopBgTrack(at){
+  bgAnchor = null;
+  if (!bgSource) return;
+  try { bgSource.stop(at === undefined ? 0 : at); } catch(e){}
+  const s = bgSource;
+  bgSource = null;
+  setTimeout(() => { try { s.disconnect(); } catch(e){} }, 300);
+}
+
+function startBgTrack(when){
+  if (!ctx || !st.running || !synced) return;
+  stopBgTrack();
+  if (!sched) sched = makeSchedule();
+  if (anchor === null) anchor = whereIsBeatZero();
+
+  const begin = Math.max(when, anchor);      // 還沒到第一拍的話就等到第一拍
+  const rel = begin - anchor;
+
+  const loop = sched.periodic;
+
+  if (loop){
+    // 沒開漸快時整段是週期性的：算幾個週期（至少 8 秒）然後無限循環。
+    // 週期從 periodFrom 開始（只預備一次時，預備拍之後才開始重複）。
+    // 記憶體固定，離開再久都不會停。
+    // 只是要調相位的話直接沿用同一段音訊，不必重算。
+    const sig = trackSig();
+    if (sig !== bgSig || !bgBuf){
+      const reps = Math.max(1, Math.ceil(8 / sched.periodLen));
+      bgBuf = renderSpan(sched.periodFrom, reps * sched.periodLen, true);
+      bgSig = sig;
+    }
+  } else {
+    // 漸快中速度一直變，而且起點不同內容就不同，每次都要重算
+    bgBuf = renderSpan(rel, 45, false);
+    bgSig = '';
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = bgBuf;
+  src.connect(master);
+  if (loop){
+    src.loop = true;
+    src.loopStart = 0;
+    src.loopEnd = bgBuf.duration;
+    const d = bgBuf.duration, from = sched.periodFrom;
+    // 還在只數一次的預備拍裡就切到背景：預備拍這段背景不播，樂句照時間準時進來
+    if (rel < from) src.start(anchor + from, 0);
+    else src.start(begin, (((rel - from) % d) + d) % d);
+  } else {
+    src.start(begin, 0);
+  }
+  bgSource = src;
+  bgAnchor = anchor;
+  bgLastStart = Date.now();
+}
+
+// 背景時的核對動作。
+// 前景每 0.1 秒就會重新核對一次基準點，發現歪掉會自動重抓；
+// 但整段音訊播出去之後不知道自己遲到了，得有人去糾正它。
+// 耳機拔掉再戴上、來電接聽完，音訊時鐘都停過一段，
+// 這裡就是靠比對「現在算出來的基準點」和「當初啟動時用的基準點」把它揪出來。
+function keepBgInPhase(){
+  if (!bgSource || !ctx || !st.running || !synced) return;
+  if (ctx.state !== 'running' || bgAnchor === null) return;
+  if (Date.now() - bgLastStart < 1500) return;      // 剛重開過，先讓它穩一下
+  const want = whereIsBeatZero();
+  if (Math.abs(want - bgAnchor) < 0.025) return;    // 還在誤差內
+  anchor = want;
+  startBgTrack(ctx.currentTime + 0.08);
+}
+
+// 取消還沒響的節點，但保留 t 之前的，讓它們把話講完
+function flushAfter(t){
+  const keep = [];
+  for (const q of queued){
+    if (q.at >= t){ for (const n of q.nodes){ try { n.stop(t); } catch(e){} } }
+    else keep.push(q);
+  }
+  queued = keep;
+  timers.forEach(clearTimeout);
+  timers = [];
+  cursor = null;
+}
+
+function reschedule(){
+  if (document.hidden){
+    // 背景中有人改了設定：重算整段，換掉那一個節點就好
+    flush();
+    startBgTrack(ctx ? ctx.currentTime + 0.12 : 0);
+    return;
+  }
+  flush();
+  pump(LOOKAHEAD, 120);
+}
+
+setInterval(() => {
+  checkAudio();
+  checkStall();
+  if (interrupted) tryResume(false);
+  if (document.hidden){
+    keepBgInPhase();   // 背景不逐拍排程，但要盯著整段音訊有沒有走鐘
+    return;
+  }
+  pump(LOOKAHEAD, 120);
+}, 100);
+
+setInterval(paintAudioInfo, 1000);
+
+/* ---------- 6c. 音訊被中斷 ---------- */
+// 藍牙耳機拿下一邊、來電、Siri、其他 app 搶走音訊，都會讓 AudioContext 停掉。
+// 這些是同一類事件，所以不去猜是哪一種，只看「音訊現在還活著嗎」。
+//
+// 恢復時不是從中斷的地方接下去，而是重新問一次「現在該在第幾拍」。
+// 拍點本來就是從伺服器時間推算的，所以接回來會自動落在對的位置，
+// 跟其他團員仍然是同步的。
+
+let interrupted = false;
+let lastTry = 0;
+let resumeFails = 0;
+let rebuilds = 0, lastRebuild = 0;
+
+// 反覆被中斷之後，AudioContext 會進入一種「自稱還活著、實際上已經死掉」的狀態：
+// state 回報 running，送進去的聲音卻不會出來，resume() 也救不回來。
+// 這種時候唯一的辦法是整個丟掉重建。
+async function rebuildAudio(force){
+  const now = Date.now();
+  if (!force && now - lastRebuild < 3000) return;
+  lastRebuild = now;
+  rebuilds++;
+
+  const old = ctx;
+  stopBgTrack();
+  flush();
+
+  ctx = null; master = null; limiter = null; noiseBuf = null;
+  WAVES = null; bgBuf = null; bgSig = '';
+  clockSeen = null; stallStrikes = 0; resumeFails = 0;
+
+  try { if (old) await old.close(); } catch(e){}
+  try { await ensureAudio(); } catch(e){}
+
+  anchor = null;
+  checkAudio();
+  paintAudioInfo();
+  if (ctx && ctx.state === 'running' && st.running){
+    if (document.hidden) startBgTrack(ctx.currentTime + 0.12);
+    else pump(LOOKAHEAD, 120);
+  }
+  if (ctx && ctx.state === 'running') toast(LINES.rebuilt);
+}
+
+// 看門狗：音訊時鐘有沒有在走。
+// 死掉的 AudioContext 常常是 state 說 running、currentTime 卻停住不動。
+let clockSeen = null, stallStrikes = 0;
+
+function checkStall(){
+  if (!ctx || ctx.state !== 'running' || !st.running){
+    clockSeen = null; stallStrikes = 0; return;
+  }
+  const now = Date.now(), at = ctx.currentTime;
+  if (!clockSeen){ clockSeen = { now, at }; return; }
+  const dWall = (now - clockSeen.now) / 1000;
+  if (dWall < 0.4) return;                    // 間隔太短，判斷不準
+  const dAudio = at - clockSeen.at;
+  clockSeen = { now, at };
+  if (dAudio < dWall * 0.25){
+    if (++stallStrikes >= 2){ stallStrikes = 0; rebuildAudio(false); toast(LINES.deadAudio); }
+  } else {
+    stallStrikes = 0;
+  }
+}
+
+function audioDown(){
+  return !!ctx && st.running && ctx.state !== 'running';
+}
+
+function checkAudio(){
+  const now = audioDown();
+  if (now === interrupted) return;
+  interrupted = now;
+  $('resumeBar').textContent = LINES.cut;
+  $('resumeBar').style.display = interrupted ? '' : 'none';
+}
+
+function resyncNow(){
+  anchor = null;
+  stopBgTrack();
+  flush();
+  if (document.hidden) startBgTrack(ctx.currentTime + 0.12);
+  else pump(LOOKAHEAD, 120);
+}
+
+async function tryResume(force){
+  if (!ctx) return;
+  const t = Date.now();
+  if (!force && t - lastTry < 700) return;   // 不要一直狂敲
+  lastTry = t;
+  try { await ctx.resume(); } catch(e){}
+  if (ctx.state === 'running'){
+    resumeFails = 0;
+    if (interrupted){
+      interrupted = false;
+      $('resumeBar').style.display = 'none';
+      resyncNow();
+      toast(LINES.reconnected);
+    }
+  } else if (interrupted && ++resumeFails >= 4){
+    // 叫不醒就別再叫了，直接重建
+    rebuildAudio(false);
+  }
+  paintAudioInfo();
+}
+
+$('resumeBar').onclick = () => tryResume(true);
+$('resetAudio').onclick = () => rebuildAudio(true);
+
+// 把音訊目前的狀況攤開來，遇到問題時看得到發生什麼事
+function paintAudioInfo(){
+  const el = $('audioInfo');
+  if (!el) return;
+  el.textContent = UI.audioInfo(ctx ? ctx.state : UI.audioNone, rebuilds);
+}
+
+// 有些情況瀏覽器要求必須由使用者動作觸發才肯恢復，
+// 所以任何一次點擊都順便試一下。
+document.addEventListener('pointerdown', () => { if (interrupted) tryResume(true); }, true);
+
+// 耳機插拔、切換輸出裝置都會觸發，拿來當「使用者把耳機戴回去了」的信號
+try {
+  navigator.mediaDevices.addEventListener('devicechange', () => tryResume(true));
+} catch(e){}
+
+setInterval(() => {
+  checkAudio();
+  checkStall();
+  if (interrupted) tryResume(false);
+  if (document.hidden){
+    keepBgInPhase();   // 背景不逐拍排程，但要盯著整段音訊有沒有走鐘
+    return;
+  }
+  pump(LOOKAHEAD, 120);
+}, 100);
+
+setInterval(paintAudioInfo, 1000);
+
+/* ---------- 7. 拍子顯示列 ---------- */
+
+let rowSig = '';
+
+function renderBeats(){
+  const sig = st.beats + ':' + st.accents.join('');
+  if (sig === rowSig) return;
+  rowSig = sig;
+
+  const row = $('beatRow');
+  row.innerHTML = '';
+  for (let i = 0; i < st.beats; i++){
+    const b = document.createElement('button');
+    b.className = 'cell' + (st.accents[i] ? ' acc' : '');
+    b.textContent = i + 1;
+    b.setAttribute('aria-label', UI.cellAria(i + 1, st.accents[i]));
+    b.onclick = () => toggleAccent(i);
+    row.appendChild(b);
+  }
+  $('beatsVal').textContent = st.beats;
+}
+
+// 重音規則：只要有任何重音，第一拍就一定是重音——不然聽不出小節從哪裡開始。
+//   點其他拍設重音 → 第一拍自動補上
+//   還有其他重音時想關掉第一拍 → 擋下來
+//   想要完全沒有重音 → 用「全部取消」，不必先一格一格關掉其他拍
+function toggleAccent(i){
+  if (!guard()) return;
+  const a = st.accents.slice();
+  if (i === 0 && a[0] && a.some((v, k) => k > 0 && v)){
+    toast(LINES.keepFirst);
+    return;
+  }
+  a[i] = a[i] ? 0 : 1;
+  if (a[i] && !a[0]) a[0] = 1;
+  setAccents(a);
+  if (a.length > 1 && a.every(Boolean)) toast(LINES.allAccent);
+}
+
+function setAccents(a){
+  st.accents = a;
+  renderBeats();     // 本機先反應，不等伺服器
+  reschedule();
+  send({ t:'accents', accents:a });
+}
+
+$('accClear').onclick = () => {
+  if (!guard()) return;
+  if (!st.accents.some(Boolean)) return;
+  setAccents(st.accents.map(() => 0));
+};
+
+function markBeat(at, i, n, hush, countIn){
+  const delay = Math.max(0, (at - ctx.currentTime) * 1000);
+  const bpmNow = sched.bpmAt(n);
+  const bar = sched.barAt(n);
+  // 預備拍數到第幾拍（跨好幾小節時接著數：1 2 3 4 5 6 7 8）
+  const countNo = countIn ? sched.barKind(Math.floor(Math.floor(n / sched.sub) / st.beats)).countBar * st.beats + i + 1 : 0;
+  const countAll = countIn ? Math.max(1, Math.round(st.count.bars) || 1) * st.beats : 0;
+  timers.push(setTimeout(() => {
+    if (!st.running) return;
+    const cells = $('beatRow').children;
+    for (const c of cells) c.classList.remove('now', 'hush', 'count');
+    // 靜音小節仍然要看得到拍子在走，只是換一種比較暗的表示，
+    // 這樣你才知道自己現在是第幾拍。預備拍用另一種樣子，一看就知道還沒進樂句。
+    if (cells[i]) cells[i].classList.add(countIn ? 'count' : hush ? 'hush' : 'now');
+    if (!dragging) paintTempo(bpmNow, bar, countIn ? [countNo, countAll] : null);
+  }, delay));
+}
+
+function clearNow(){
+  for (const c of $('beatRow').children) c.classList.remove('now', 'hush', 'count');
+}
+
+function paintTempo(bpmNow, bar, count){
+  $('bpmNum').textContent = bpmNow;
+  if (count){
+    $('tempoLabel').textContent = UI.countNow(count[0], count[1]);
+  } else if (st.ramp.on && bar != null){
+    $('tempoLabel').textContent = UI.rampNow(st.ramp.target, bar);
+  } else {
+    $('tempoLabel').textContent = UI.perMin(bpmNow);
+  }
+}
+
+/* ---------- 8. 細分按鈕 ---------- */
+
+function renderSubs(){
+  const row = $('subRow');
+  if (!row.children.length){
+    for (const n of SUB_LIST){
+      const b = document.createElement('button');
+      b.className = 'subchip';
+      b.dataset.n = n;
+      b.onclick = () => {
+        if (!guard()) return;
+        st.sub = n; renderSubs(); reschedule(); send({ t:'sub', sub:n });
+      };
+      row.appendChild(b);
+    }
+  }
+  for (const b of row.children){
+    const n = Number(b.dataset.n);
+    b.innerHTML = subNoteSvg(n);
+    b.title = subLabel(n);
+    b.setAttribute('aria-label', UI.subAria(n, subLabel(n)));
+    b.classList.toggle('on', n === st.sub);
+  }
+}
+
+/* ---------- 9. 曲目清單（存在自己的裝置裡） ---------- */
+
+let songs = [];
+try { songs = JSON.parse(localStorage.getItem('mmSongs') || '[]'); } catch(e){ songs = []; }
+if (!Array.isArray(songs)) songs = [];
+
+function saveSongs(){
+  localStorage.setItem('mmSongs', JSON.stringify(songs));
+  renderSongs();
+}
+
+function renderSongs(){
+  $('songCount').textContent = UI.songCount(songs.length);
+  const list = $('songList');
+  list.innerHTML = '';
+  if (!songs.length){
+    const p = document.createElement('p');
+    p.className = 'hint';
+    p.style.margin = '.2rem 0 0';
+    p.textContent = LINES.noSongs;
+    list.appendChild(p);
+  }
+  songs.forEach((s, idx) => {
+    const row = document.createElement('div');
+    row.className = 'song';
+
+    const main = document.createElement('button');
+    main.className = 'song-main';
+    const info = UI.songInfo(s.bpm, s.beats)
+      + (s.len ? UI.songLen(fmtTime(s.len)) : '');
+    main.innerHTML = '<b></b><span></span>';
+    main.firstChild.textContent = s.name;
+    main.lastChild.textContent = info;
+    main.onclick = () => loadSong(idx);
+
+    const up = document.createElement('button');
+    up.className = 'song-side';
+    up.textContent = '↑';
+    up.setAttribute('aria-label', UI.moveUp);
+    up.onclick = () => {
+      if (idx === 0) return;
+      [songs[idx-1], songs[idx]] = [songs[idx], songs[idx-1]];
+      saveSongs();
+    };
+
+    const del = document.createElement('button');
+    del.className = 'song-side';
+    del.textContent = '×';
+    del.setAttribute('aria-label', UI.remove);
+    del.onclick = () => { songs.splice(idx, 1); saveSongs(); };
+
+    row.append(main, up, del);
+    list.appendChild(row);
+  });
+}
+
+function loadSong(idx){
+  if (!guard()) return;
+  const s = songs[idx];
+  if (!s) return;
+  send({ t:'song', bpm:clamp(s.bpm, BPM_MIN, BPM_MAX), beats:s.beats,
+         accents:s.accents, sub:s.sub, ramp:s.ramp, mute:s.mute,
+         // 預備拍是後來才加的；舊曲目沒有的話不送，房間維持現在的設定
+         ...(s.count ? { count:s.count } : {}) });
+  // 把這首的速度和長度填回「耗時」的原曲欄位。沒存長度的就清空長度，免得留著上一首的數字
+  //（origBpm 是短暫存在過的舊欄位，那一版把原曲速度跟曲目速度分開存）
+  fillCalc(s.origBpm || s.bpm, s.len || 0);
+  toast(UI.applied(s.name));
+}
+
+// 存曲目時速度要用哪一個：
+//   「耗時」沒填原曲速度 → 用目前速度
+//   原曲速度跟目前速度一樣 → 就是它
+//   不一樣 → 問。常見情況是存完一首、拉了滑桿要存下一首，
+//            原曲速度那格卻還留著上一首的數字
+// 選過一次之後，兩個數字都沒變的話就不再問（例如被叫去補長度、回來再按一次存）。
+let lastPick = null;
+async function pickSongTempo(calcBpm, now){
+  if (!calcBpm) return now;
+  const c = clamp(calcBpm, BPM_MIN, BPM_MAX);
+  if (c === now) return now;
+  if (lastPick && lastPick.calc === c && lastPick.now === now) return lastPick.bpm;
+  const bpm = await ask(LINES.pickTempo, [
+    { label: String(c),   value: c },
+    { label: String(now), value: now },
+  ]);
+  if (bpm != null) lastPick = { calc: c, now, bpm };
+  return bpm;
+}
+
+// 帶人去「耗時」填長度。clear 為真時先把長度清空。
+// 分、秒兩格閃兩下紅框，捲過去之後一眼就看得到該填哪裡。
+function goFillLength(clear){
+  if (clear) fillLength(0);
+  const box = $('calcBox');
+  box.open = true;
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('calcMin').focus({ preventScroll: true });
+  for (const id of ['calcMin', 'calcSec']){
+    const el = $(id);
+    el.classList.remove('flash');
+    void el.offsetWidth;          // 重新觸發動畫
+    el.classList.add('flash');
+  }
+}
+
+let savingSong = false;
+$('songSave').onclick = async () => {
+  if (savingSong) return;
+  const name = $('songName').value.trim();
+  if (!name){ toast(LINES.noName); return; }
+  savingSong = true;
+  try {
+    const calc = readCalc();
+    const bpm = await pickSongTempo(calc.bpm, Number($('bpmRange').value));
+    if (bpm == null) return;
+
+    if (!calc.sec){
+      const skip = await ask(LINES.noLength, [
+        { label: UI.yes, value: true },
+        { label: UI.no,  value: false },
+      ]);
+      if (skip == null) return;
+      if (!skip){ goFillLength(false); return; }
+    } else if (calc.sec === leftoverLen){
+      // 長度是上一首存完之後就沒人動過的，很可能是忘了改
+      const same = await ask(LINES.sameLength(fmtTime(calc.sec)), [
+        { label: UI.yes, value: true },
+        { label: UI.no,  value: false },
+      ]);
+      if (same == null) return;
+      if (!same){ goFillLength(true); return; }
+    }
+
+    songs.push({
+      name,
+      bpm, beats: st.beats, sub: st.sub,
+      accents: st.accents.slice(),
+      ramp: { ...st.ramp },
+      mute: { ...st.mute },
+      count: { ...st.count },
+      ...(calc.sec ? { len: Math.min(calc.sec, SONG_LEN_MAX) } : {}),
+    });
+    lastPick = null;
+    setLeftoverLen(calc.sec || null);   // 記下來，下一首存的時候長度沒動過就問
+    $('songName').value = '';
+    saveSongs();
+    toast(UI.saved(name));
+  } finally {
+    savingSong = false;
+  }
+};
+
+// 問一個問題，選項是按鈕。回傳選到的值；按取消、點外面或按 Esc 回傳 null。
+function ask(text, options){
+  return new Promise(resolve => {
+    const box = $('ask'), opts = $('askOpts');
+    const back = document.activeElement;
+    $('askText').textContent = text;
+    opts.innerHTML = '';
+    const done = v => {
+      box.hidden = true;
+      document.removeEventListener('keydown', onKey, true);
+      if (back && back.focus) back.focus({ preventScroll: true });
+      resolve(v);
+    };
+    const onKey = e => { if (e.key === 'Escape'){ e.preventDefault(); done(null); } };
+    for (const o of options){
+      const b = document.createElement('button');
+      b.textContent = o.label;
+      b.onclick = () => done(o.value);
+      opts.appendChild(b);
+    }
+    $('askCancel').onclick = () => done(null);
+    box.onclick = e => { if (e.target === box) done(null); };
+    document.addEventListener('keydown', onKey, true);
+    box.hidden = false;
+    opts.firstChild.focus();
+  });
+}
+$('songName').addEventListener('keydown', e => { if (e.key === 'Enter') $('songSave').click(); });
+
+$('songExport').onclick = async () => {
+  if (!songs.length){ toast(LINES.emptyList); return; }
+  const text = JSON.stringify(songs);
+  $('songBox').value = text;
+  try { await navigator.clipboard.writeText(text); toast(UI.copied); }
+  catch(e){ toast(UI.copyByHand); }
+};
+
+$('songImport').onclick = () => {
+  const text = $('songBox').value.trim();
+  if (!text){ toast(UI.pasteFirst); return; }
+  let incoming;
+  try { incoming = JSON.parse(text); } catch(e){ toast(LINES.badImport); return; }
+  if (!Array.isArray(incoming)){ toast(LINES.badImport); return; }
+  let added = 0;
+  for (const s of incoming){
+    if (!s || typeof s.name !== 'string' || !Array.isArray(s.accents)) continue;
+    if (songs.some(x => x.name === s.name)) continue;   // 同名的不重複加
+    // 舊版匯出的曲目可能帶著 unit（拍子單位），現在不用了，直接略過
+    songs.push({
+      name: String(s.name).slice(0, 30),
+      bpm: clamp(Math.round(s.bpm) || 90, BPM_MIN, BPM_MAX),
+      beats: Math.min(12, Math.max(1, Math.round(s.beats) || 4)),
+      sub: SUB_LIST.includes(s.sub) ? s.sub : 1,
+      accents: s.accents.map(v => (v ? 1 : 0)),
+      ramp: s.ramp && typeof s.ramp === 'object'
+        ? { on:!!s.ramp.on, bars:s.ramp.bars||4, step:s.ramp.step||2, target:s.ramp.target||160 }
+        : { on:false, bars:4, step:2, target:160 },
+      mute: s.mute && typeof s.mute === 'object'
+        ? { on:!!s.mute.on, play:s.mute.play||3, rest:s.mute.rest||1 }
+        : { on:false, play:3, rest:1 },
+      ...(s.count && typeof s.count === 'object'
+        ? { count:{ on:!!s.count.on, loop:!!s.count.loop,
+                    bars:clamp(Math.round(s.count.bars) || 1, 1, COUNT_BARS_MAX),
+                    phrase:clamp(Math.round(s.count.phrase) || 4, 1, PHRASE_MAX) } }
+        : {}),
+      // 原曲速度與長度是後來才加的，舊版匯出的曲目沒有，不合理的數字也不收
+      ...(Number.isFinite(s.origBpm) && s.origBpm >= BPM_MIN && s.origBpm <= BPM_MAX
+          ? { origBpm: Math.round(s.origBpm) } : {}),
+      ...(Number.isFinite(s.len) && s.len > 0 && s.len <= SONG_LEN_MAX
+          ? { len: Math.round(s.len) } : {}),
+    });
+    added++;
+  }
+  saveSongs();
+  $('songBox').value = '';
+  toast(added ? UI.added(added) : LINES.nothingNew);
+};
+
+/* ---------- 10. 漸快訓練 ---------- */
+
+let rampTimer = null;
+function pushRamp(){
+  clearTimeout(rampTimer);
+  rampTimer = setTimeout(() => send({ t:'ramp', ...st.ramp }), 200);
+}
+
+function renderRamp(){
+  const R = st.ramp;
+  $('rampOn').checked = R.on;
+  showNum('barsVal', R.bars);
+  showNum('stepVal', R.step);
+  showNum('targetVal', R.target);
+  if (!draggingTarget) $('targetRange').value = R.target;
+  $('rampLabel').textContent = R.on
+    ? UI.rampLabel(R.bars, R.step, R.target)
+    : UI.off;
+}
+
+function setRamp(patch){
+  if (!guard()) return;
+  st.ramp = { ...st.ramp, ...patch };
+  renderRamp();
+  pushRamp();
+  if (st.ramp.on && st.ramp.target <= st.bpm) toast(LINES.rampDown(st.bpm));
+}
+
+$('rampOn').onchange = e => {
+  if (!canControl()){ e.target.checked = st.ramp.on; denied(); return; }
+  setRamp({ on: e.target.checked });
+};
+$('barsMinus').onclick = () => setRamp({ bars: Math.max(1, st.ramp.bars - 1) });
+$('barsPlus').onclick  = () => setRamp({ bars: Math.min(16, st.ramp.bars + 1) });
+$('stepMinus').onclick = () => setRamp({ step: Math.max(1, st.ramp.step - 1) });
+$('stepPlus').onclick  = () => setRamp({ step: Math.min(20, st.ramp.step + 1) });
+
+// 漸快、靜音訓練的數字可以直接點來打，會跳出數字鍵盤。
+// 打字的過程中不送，按 Enter／完成或離開這格才算數；超出範圍就停在上下限。
+// 正在打的那格不要被畫面更新蓋掉。
+function showNum(id, v){
+  const el = $(id);
+  if (document.activeElement !== el) el.value = v;
+}
+function bindNum(id, min, max, apply, rerender){
+  const el = $(id);
+  el.addEventListener('focus', () => el.select());
+  el.addEventListener('input', () => { el.value = el.value.replace(/\D/g, ''); });
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter'){ e.preventDefault(); el.blur(); }
+  });
+  el.addEventListener('change', () => {
+    const raw = el.value.trim();
+    if (raw !== '') apply(clamp(Math.round(Number(raw)), min, max));   // 上鎖時會在 setRamp／setMute 裡被擋下
+    el.blur();
+    rerender();        // 空白、被擋下或被夾到上下限，都要把格子改回實際的數字
+  });
+}
+bindNum('barsVal',   1, 16, v => setRamp({ bars: v }),   renderRamp);
+bindNum('stepVal',   1, 20, v => setRamp({ step: v }),   renderRamp);
+bindNum('targetVal', BPM_MIN, BPM_MAX, v => setRamp({ target: v }), renderRamp);
+
+let draggingTarget = false;
+$('targetRange').addEventListener('pointerdown', () => { draggingTarget = true; });
+$('targetRange').addEventListener('input', e => {
+  $('targetVal').value = e.target.value;
+  setRamp({ target: Number(e.target.value) });
+});
+['pointerup','pointercancel','blur'].forEach(ev =>
+  $('targetRange').addEventListener(ev, () => { draggingTarget = false; }));
+
+/* ---------- 10b. 靜音訓練 ---------- */
+
+let muteTimer = null;
+function pushMute(){
+  clearTimeout(muteTimer);
+  muteTimer = setTimeout(() => send({ t:'mute', ...st.mute }), 200);
+}
+
+function renderMute(){
+  const M = st.mute;
+  $('muteOn').checked = M.on;
+  showNum('playVal', M.play);
+  showNum('restVal', M.rest);
+  $('muteLabel').textContent = M.on ? UI.muteLabel(M.play, M.rest) : UI.off;
+}
+
+function setMute(patch){
+  if (!guard()) return;
+  st.mute = { ...st.mute, ...patch };
+  renderMute();
+  reschedule();      // 時刻不變，但哪幾拍不出聲變了，要重排
+  pushMute();
+}
+
+$('muteOn').onchange = e => {
+  if (!canControl()){ e.target.checked = st.mute.on; denied(); return; }
+  setMute({ on: e.target.checked });
+};
+$('playMinus').onclick = () => setMute({ play: Math.max(1, st.mute.play - 1) });
+$('playPlus').onclick  = () => setMute({ play: Math.min(16, st.mute.play + 1) });
+$('restMinus').onclick = () => setMute({ rest: Math.max(1, st.mute.rest - 1) });
+$('restPlus').onclick  = () => setMute({ rest: Math.min(16, st.mute.rest + 1) });
+bindNum('playVal', 1, 16, v => setMute({ play: v }), renderMute);
+bindNum('restVal', 1, 16, v => setMute({ rest: v }), renderMute);
+
+/* ---------- 10c. 預備拍 ----------
+   開始前先數幾小節；勾「每個樂句前都重新數」的話，就是
+   【預備】【樂句】【預備】【樂句】…一直循環，練同一段不用停下來重按。
+   改了會讓所有人一起從頭起算（跟改速度一樣），所以送出去之後由伺服器重設起點。 */
+const COUNT_BARS_MAX = 4, PHRASE_MAX = 32;
+let countTimer = null;
+function pushCount(){
+  clearTimeout(countTimer);
+  countTimer = setTimeout(() => send({ t:'count', ...st.count }), 200);
+}
+
+function renderCount(){
+  const C = st.count;
+  $('countOn').checked = C.on;
+  $('countLoop').checked = C.loop;
+  showNum('countBarsVal', C.bars);
+  showNum('phraseVal', C.phrase);
+  // 沒開預備拍時，「每個樂句前都重新數」沒有意義，先變淡
+  $('countLoopArea').classList.toggle('dim', !C.on);
+  $('countLabel').textContent = !C.on ? UI.off
+    : C.loop ? UI.countLoopLabel(C.bars, C.phrase) : UI.countOnceLabel(C.bars);
+}
+
+function setCount(patch){
+  if (!guard()) return;
+  st.count = { ...st.count, ...patch };
+  renderCount();
+  pushCount();
+}
+
+$('countOn').onchange = e => {
+  if (!canControl()){ e.target.checked = st.count.on; denied(); return; }
+  setCount({ on: e.target.checked });
+};
+$('countLoop').onchange = e => {
+  if (!canControl()){ e.target.checked = st.count.loop; denied(); return; }
+  // 勾了循環就順便把預備拍打開，不然勾了也沒作用
+  setCount(e.target.checked ? { loop:true, on:true } : { loop:false });
+};
+$('countBarsMinus').onclick = () => setCount({ bars: Math.max(1, st.count.bars - 1) });
+$('countBarsPlus').onclick  = () => setCount({ bars: Math.min(COUNT_BARS_MAX, st.count.bars + 1) });
+$('phraseMinus').onclick    = () => setCount({ phrase: Math.max(1, st.count.phrase - 1) });
+$('phrasePlus').onclick     = () => setCount({ phrase: Math.min(PHRASE_MAX, st.count.phrase + 1) });
+bindNum('countBarsVal', 1, COUNT_BARS_MAX, v => setCount({ bars: v }),   renderCount);
+bindNum('phraseVal',    1, PHRASE_MAX,     v => setCount({ phrase: v }), renderCount);
+
+/* ---------- 11. 畫面更新 ---------- */
+
+let dragging = false;
+
+function onState(m){
+  // 還沒更新的舊版伺服器不會送 count，就當成沒開預備拍
+  if (!m.count) m.count = { on:false, bars:1, loop:false, phrase:4 };
+  const gridChanged = m.startAt !== grid.startAt || m.bpm !== grid.bpm;
+  const otherChanged =
+    m.beats !== st.beats ||
+    m.sub !== st.sub ||
+    m.accents.join('') !== st.accents.join('') ||
+    JSON.stringify(m.ramp) !== JSON.stringify(st.ramp) ||
+    JSON.stringify(m.mute) !== JSON.stringify(st.mute) ||
+    JSON.stringify(m.count) !== JSON.stringify(st.count);
+  // 原本的房主離線，控制權自動交到自己手上時要說一聲（剛進房就是房主的不算）
+  const becameOwner = st.code === m.code && !st.isOwner && m.isOwner;
+
+  Object.assign(st, m);
+  if (becameOwner) toast(LINES.nowOwner);
+  wantCode = m.code;
+
+  if (location.hash.slice(1) !== m.code) history.replaceState(null, '', '#' + m.code);
+  showRoom();
+
+  $('roomCode').firstChild.textContent = m.code;
+  // 人數用「人形圖示＋數字」，頂部列才放得下返回鍵（英文的 12 people 太長）；完整說法給讀屏和滑鼠提示
+  $('peopleNum').textContent = m.people;
+  $('people').setAttribute('aria-label', UI.people(m.people));
+  $('people').title = UI.people(m.people);
+  if (!dragging){
+    $('bpmRange').value = m.bpm;
+    if (!m.running) paintTempo(m.bpm, null);
+    updateCalc();
+  }
+  $('play').textContent = m.running ? UI.stop : UI.start;
+  $('play').classList.toggle('on', m.running);
+
+  renderBeats();
+  renderSubs();
+  renderRamp();
+  renderMute();
+  renderCount();
+  renderLock();
+
+  if (gridChanged) resetGrid();
+  if (!m.running){
+    // 停止時音軌一定要收掉。它是循環播放的，沒人喊停會一直響下去。
+    stopBgTrack();
+    flush();
+    clearNow();
+    interrupted = false;
+    $('resumeBar').style.display = 'none';
+  } else if (gridChanged || otherChanged){
+    // 有人改了設定。舊的作廢，當場換上新的——
+    // 背景時下一次計時器可能好幾秒後才醒，等不得。
+    reschedule();
+  }
+}
+
+// 房號下面那行小字標出自己的身分：房主（主題色＋小皇冠）或成員
+const CROWN = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 12.5 1.8 5.2l3.6 2.6L8 3.2l2.6 4.6 3.6-2.6-.7 7.3z" fill="currentColor"/></svg>';
+function renderRole(){
+  const t = $('roleTag');
+  t.innerHTML = st.isOwner ? CROWN + '<span></span>' : '<span></span>';
+  t.lastChild.textContent = st.isOwner ? UI.roleOwner : UI.roleMember;
+  t.classList.toggle('owner', st.isOwner);
+  t.title = st.isOwner ? UI.roleOwnerTip : UI.roleMemberTip;
+}
+
+function renderLock(){
+  renderRole();
+  const b = $('lockBtn');
+  b.textContent = st.locked ? UI.locked : UI.open;
+  b.classList.toggle('lit', st.locked);
+  b.classList.toggle('ro', !st.isOwner);
+  b.title = st.isOwner ? UI.lockOwner : UI.lockOther;
+  $('shared').classList.toggle('off', !canControl());
+}
+
+// 鎖住時不是讓整區點不動，而是攔下來告訴你為什麼沒用
+for (const evName of ['pointerdown','click']){
+  $('shared').addEventListener(evName, e => {
+    if (canControl()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (evName === 'pointerdown') denied();
+  }, true);
+}
+
+$('lockBtn').onclick = () => {
+  if (!st.isOwner){ toast(LINES.lockSide); return; }
+  send({ t:'lock', locked: !st.locked });
+};
+
+function showRoom(){
+  if ($('room').classList.contains('on')) return;
+  $('gate').classList.remove('on');
+  $('room').classList.add('on');
+}
+
+function showError(msg, hot){
+  const el = $('gateErr');
+  el.textContent = msg;
+  el.classList.toggle('hot', !!hot);
+  setTimeout(() => { el.textContent = ''; el.classList.remove('hot'); }, 4000);
+}
+
+/* ---------- 12. 操作 ---------- */
+
+$('joinBtn').onclick = async () => {
+  const code = $('code').value.toUpperCase().trim();
+  if (code.length === 0){ showError(LINES.emptyCode); return; }
+  if (code.length !== 4){ showError(LINES.shortCode(code.length)); return; }
+  await ensureAudio(); await keepAwake();
+  wantCode = code;
+  send({ t:'join', code });
+};
+
+$('createBtn').onclick = async () => {
+  await ensureAudio(); await keepAwake();
+  send({ t:'create' });
+};
+
+$('code').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+});
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') $('joinBtn').click(); });
+
+$('play').onclick = async () => {
+  if (!guard()) return;
+  await ensureAudio(); await keepAwake();
+  send({ t: st.running ? 'stop' : 'start' });
+};
+
+// 速度：畫面立刻反應，送到伺服器則稍微延後，避免拖動時洗版
+let bpmTimer = null;
+function setBpm(v, delay = 180){
+  if (!guard()) return;
+  v = clamp(Math.round(v), BPM_MIN, BPM_MAX);
+  $('bpmNum').textContent = v;
+  $('tempoLabel').textContent = UI.perMin(v);
+  $('bpmRange').value = v;
+  updateCalc();
+  clearTimeout(bpmTimer);
+  bpmTimer = setTimeout(() => send({ t:'bpm', bpm:v }), delay);
+}
+
+// 點大數字直接輸入速度。超出範圍就停在上下限，順便說一句。
+let typingBpm = false;
+function openBpmInput(){
+  if (typingBpm || !guard()) return;
+  typingBpm = true;
+  const input = $('bpmInput');
+  input.value = $('bpmNum').textContent;
+  $('bpmNum').style.display = 'none';
+  input.style.display = 'block';
+  input.focus();
+  input.select();
+}
+function closeBpmInput(commit){
+  if (!typingBpm) return;
+  typingBpm = false;
+  const input = $('bpmInput');
+  const raw = input.value.trim();
+  input.style.display = 'none';
+  $('bpmNum').style.display = '';
+  if (!commit || raw === '') return;
+  const v = Number(raw);
+  if (v < BPM_MIN) toast(LINES.typedSlow);
+  else if (v > BPM_MAX) toast(LINES.typedFast);
+  setBpm(v);
+}
+$('bpmNum').addEventListener('click', openBpmInput);
+$('bpmNum').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); openBpmInput(); }
+});
+$('bpmInput').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+});
+$('bpmInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); closeBpmInput(true); }
+  if (e.key === 'Escape'){ e.preventDefault(); closeBpmInput(false); }
+});
+$('bpmInput').addEventListener('blur', () => closeBpmInput(true));
+// 保險：萬一輸入框沒拿到焦點（就不會有 blur），點其他地方也會收起來
+document.addEventListener('pointerdown', e => {
+  if (typingBpm && e.target !== $('bpmInput')) closeBpmInput(true);
+}, true);
+
+$('bpmRange').addEventListener('pointerdown', () => { dragging = true; });
+$('bpmRange').addEventListener('input', e => setBpm(Number(e.target.value)));
+['pointerup','pointercancel','blur'].forEach(ev =>
+  $('bpmRange').addEventListener(ev, () => { dragging = false; }));
+
+function holdable(btn, fn){
+  let t1, t2;
+  const down = e => {
+    e.preventDefault();
+    dragging = true;
+    fn();
+    t1 = setTimeout(() => { t2 = setInterval(fn, 90); }, 420);
+  };
+  const up = () => { clearTimeout(t1); clearInterval(t2); dragging = false; };
+  btn.addEventListener('pointerdown', down);
+  ['pointerup','pointerleave','pointercancel'].forEach(ev => btn.addEventListener(ev, up));
+  btn.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fn(); }
+  });
+}
+holdable($('minus'), () => {
+  if (!guard()) return;
+  const cur = Number($('bpmRange').value);
+  if (cur <= BPM_MIN){ toast(LINES.tooSlow(BPM_MIN)); return; }
+  setBpm(cur - 1);
+});
+holdable($('plus'), () => {
+  if (!guard()) return;
+  const cur = Number($('bpmRange').value);
+  if (cur >= BPM_MAX){ toast(LINES.tooFast(BPM_MAX)); return; }
+  setBpm(cur + 1);
+});
+
+/* ---------- Tap tempo ----------
+   跟著節奏連點，取最近幾下的平均間隔算速度。
+   停超過兩秒就當成重新開始。
+   點的過程中只更新畫面，停手之後才送出——
+   每改一次速度所有人都會重新起算，邊點邊送會一直斷拍。 */
+const TAP_RESET_MS = 2000, TAP_KEEP = 6;
+let taps = [], tapSendTimer = null;
+function tap(){
+  if (!guard()) return;
+  const now = performance.now();
+  if (taps.length && now - taps[taps.length - 1] > TAP_RESET_MS) taps = [];
+  taps.push(now);
+  if (taps.length > TAP_KEEP) taps.shift();
+
+  const b = $('tapBtn');
+  b.classList.add('hit');
+  setTimeout(() => b.classList.remove('hit'), 90);
+
+  if (taps.length < 2){ b.textContent = 'Tap…'; return; }
+  const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+  const v = 60000 / avg;
+  if (v > BPM_MAX) toast(LINES.typedFast);
+
+  // 等下一下該來的時間再多一點都沒來，才算停手
+  const wait = Math.round(avg * 1.3) + 150;
+  dragging = true;                       // 點的時候別讓正在跑的拍子把數字蓋回去
+  setBpm(v, wait);
+  b.textContent = 'Tap';
+  clearTimeout(tapSendTimer);
+  tapSendTimer = setTimeout(() => { dragging = false; }, wait + 50);
+}
+$('tapBtn').addEventListener('pointerdown', e => { e.preventDefault(); tap(); });
+$('tapBtn').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); tap(); }
+});
+
+/* ---------- 耗時計算 ----------
+   原曲速度 × 原曲長度 ÷ 目前速度 = 用目前速度演奏全曲要多久。
+   每個人自己的，存在自己的裝置裡，不同步也不受鎖影響。 */
+const fmtTime = sec => {
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+  const ss = String(s).padStart(2, '0');
+  return h ? h + ':' + String(m).padStart(2, '0') + ':' + ss : m + ':' + ss;
+};
+
+function readCalc(){
+  const bpm = Number($('calcBpm').value);
+  const sec = Number($('calcMin').value || 0) * 60 + Number($('calcSec').value || 0);
+  return { bpm, sec };
+}
+
+// 分鐘欄最多三位數，所以長度上限是 999:59
+const SONG_LEN_MAX = 999 * 60 + 59;
+
+// 上一首曲目存進去的長度，而且之後沒人動過長度欄。
+// 存下一首時長度還是這個數字，就要問是不是忘了改。
+// 手動改分／秒、點曲目帶入長度，都算動過，這個記錄就作廢。
+// 手機切到背景常被重新載入，所以也記在裝置裡。
+let leftoverLen = null;
+try { leftoverLen = Number(localStorage.getItem('mmCalcLeftover')) || null; } catch(e){}
+function setLeftoverLen(sec){
+  leftoverLen = sec || null;
+  try {
+    if (leftoverLen) localStorage.setItem('mmCalcLeftover', leftoverLen);
+    else localStorage.removeItem('mmCalcLeftover');
+  } catch(e){}
+}
+
+function setField(id, value){
+  $(id).value = value;
+  try { localStorage.setItem('mmCalc_' + id, value); } catch(e){}
+}
+
+// 只填長度（秒）。給 0 就是清空。
+function fillLength(sec){
+  setField('calcMin', sec ? String(Math.floor(sec / 60)) : '');
+  setField('calcSec', sec ? String(sec % 60) : '');
+  setLeftoverLen(null);
+  updateCalc();
+}
+
+// 把原曲速度和長度（秒）填進欄位，順便存起來、重算。長度給 0 就是清空。
+function fillCalc(bpm, sec){
+  setField('calcBpm', bpm ? String(bpm) : '');
+  fillLength(sec);
+}
+
+function updateCalc(){
+  const { bpm, sec } = readCalc();
+  const now = Number($('bpmRange').value);
+  // 「目前速度」跟著房間的速度走；正在打字的時候不要蓋掉
+  if (document.activeElement !== $('calcNow')) $('calcNow').value = now;
+  const out = $('calcOut');
+  if (!bpm || !sec){
+    out.textContent = UI.calcEmpty;
+    $('calcLabel').textContent = UI.unset;
+    return;
+  }
+  const len = sec * bpm / now;
+  const pct = Math.round(now / bpm * 100);
+  const diff = len - sec;
+  const diffText = Math.abs(diff) < 0.5 ? UI.calcSame
+    : (diff > 0 ? UI.calcLonger : UI.calcShorter)(fmtTime(Math.abs(diff)));
+  out.innerHTML = '';
+  out.append(
+    UI.calcPct(pct),
+    document.createElement('br'),
+    UI.calcTotal, Object.assign(document.createElement('b'), { textContent: fmtTime(len) }),
+    UI.calcDiff(diffText)
+  );
+  $('calcLabel').textContent = fmtTime(sec) + ' → ' + fmtTime(len);
+}
+
+for (const id of ['calcBpm', 'calcMin', 'calcSec']){
+  const el = $(id);
+  try { el.value = localStorage.getItem('mmCalc_' + id) || ''; } catch(e){}
+  el.addEventListener('input', () => {
+    el.value = el.value.replace(/\D/g, '');
+    try { localStorage.setItem('mmCalc_' + id, el.value); } catch(e){}
+    if (id !== 'calcBpm') setLeftoverLen(null);   // 動過長度了
+    el.classList.remove('flash');
+    updateCalc();
+  });
+}
+
+// 「目前速度」改了就改整個房間的速度，規則跟點大數字輸入一樣。
+// 打字的過程中不送，按 Enter／完成或離開這格才算數。
+$('calcNow').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/\D/g, '');
+});
+$('calcNow').addEventListener('keydown', e => {
+  if (e.key === 'Enter'){ e.preventDefault(); e.target.blur(); }
+});
+$('calcNow').addEventListener('change', e => {
+  const raw = e.target.value.trim();
+  if (raw !== ''){
+    const v = Number(raw);
+    if (canControl()){
+      if (v < BPM_MIN) toast(LINES.typedSlow);
+      else if (v > BPM_MAX) toast(LINES.typedFast);
+    }
+    setBpm(v);          // 上鎖時會在這裡被擋下
+  }
+  updateCalc();         // 空白、被擋下或被夾到上下限，都要把格子改回實際的速度
+});
+updateCalc();
+
+function setBeats(n){
+  if (!guard()) return;
+  if (n > 12){ toast(LINES.tooMany); return; }
+  if (n < 1){ toast(LINES.tooFew); return; }
+  if (n === st.beats) return;
+  send({ t:'beats', beats:n });
+}
+$('beatsMinus').onclick = () => setBeats(st.beats - 1);
+$('beatsPlus').onclick  = () => setBeats(st.beats + 1);
+
+// 靜音鍵（每個人自己的，不受鎖影響）。拍子照走，只是這支手機不出聲。
+// 跟「靜音訓練」的 renderMute 是兩回事，名字不能撞。
+const SPEAKER = '<path d="M2 6h2.6L8.5 2.8v10.4L4.6 10H2z" fill="currentColor"/>';
+function renderMuteBtn(){
+  const b = $('muteBtn');
+  b.innerHTML = '<svg class="spk" viewBox="0 0 16 16" aria-hidden="true">' + SPEAKER
+    + (muted
+      ? '<path d="M10.6 5.8l4 4.4M14.6 5.8l-4 4.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>'
+      : '<path d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8M12.7 3.7a6 6 0 0 1 0 8.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/>')
+    + '</svg>';
+  b.classList.toggle('warn', muted);
+  b.setAttribute('aria-label', muted ? UI.muteOn : UI.muteOff);
+  b.setAttribute('aria-pressed', muted);
+  if (master) master.gain.setTargetAtTime(outGain(), ctx.currentTime, 0.02);
+}
+$('muteBtn').onclick = () => {
+  muted = !muted;
+  localStorage.setItem('mmMute', muted ? '1' : '0');
+  toast(muted ? LINES.mute : LINES.unmute);
+  renderMuteBtn();
+};
+renderMuteBtn();
+
+// 耳機延遲（每個人自己的，不受鎖影響）。滑桿之外兩邊有 −／＋ 一次微調 5 毫秒，按住會連續調。
+const LAT_MIN = 0, LAT_MAX = 400, LAT_STEP = 5;
+function setLatency(v){
+  v = clamp(Math.round(v), LAT_MIN, LAT_MAX);
+  if (v === myLatency) return;
+  myLatency = v;
+  $('latRange').value = v;
+  $('latLabel').textContent = v + ' ms';
+  localStorage.setItem('mmLatency', v);
+  anchor = null;
+  reschedule();
+}
+$('latRange').value = myLatency;
+$('latLabel').textContent = myLatency + ' ms';
+$('latRange').addEventListener('input', e => setLatency(Number(e.target.value)));
+holdable($('latMinus'), () => setLatency(myLatency - LAT_STEP));
+holdable($('latPlus'),  () => setLatency(myLatency + LAT_STEP));
+
+$('shareBtn').onclick = async () => {
+  const url = serverBase() + '/#' + st.code;
+  try { await navigator.clipboard.writeText(url); $('shareBtn').textContent = UI.shareDone; }
+  catch(e){ $('shareBtn').textContent = url; }
+  setTimeout(() => { $('shareBtn').textContent = UI.share; }, 2000);
+};
+
+function backToGate(){
+  stopBgTrack();
+  st.running = false;
+  st.code = null;
+  st.isOwner = false;
+  st.locked = false;
+  wantCode = null;
+  flush();
+  history.replaceState(null, '', location.pathname);
+  $('room').classList.remove('on');
+  $('gate').classList.add('on');
+}
+
+$('leaveBtn').title = UI.leave;     // 滑鼠移上去時的提示
+$('leaveBtn').onclick = () => {
+  send({ t:'leave' });
+  backToGate();
+  $('code').value = '';
+};
+
+/* ---------- 13. 螢幕不要睡著 ---------- */
+
+let wake = null;
+async function keepAwake(){
+  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch(e){}
+}
+document.addEventListener('visibilitychange', () => {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+
+  if (document.hidden){
+    // 要被收到背景了。交棒給整段音軌：
+    // 已經排好的節點讓它們把接下來 0.45 秒講完，音軌從那之後接手，
+    // 這樣中間不會有縫，也不會有兩邊同時發聲。
+    const handover = now + 0.45;
+    flushAfter(handover);
+    startBgTrack(handover);
+    return;
+  }
+
+  // 回到前景。音軌停掉，換回逐拍排程。
+  // 背景期間音訊時鐘可能停過，跟系統時鐘的對應關係要重抓。
+  const wasRunning = st.running;
+  const handback = now + 0.2;
+  stopBgTrack(handback);
+  holdUntil = handback;     // 這之前的聲音音軌已經負責了，不要重複
+  anchor = null;
+  flush();
+  clockSeen = null;         // 離開期間的時鐘讀數不能拿來判斷有沒有停住
+
+  // 回來時如果音訊已經叫不醒，直接重建，不要卡在「以為好了但沒聲音」
+  ctx.resume().then(() => {
+    if (ctx.state === 'running'){ pump(LOOKAHEAD, 120); paintAudioInfo(); }
+    else rebuildAudio(false);
+  }).catch(() => rebuildAudio(false));
+  keepAwake();
+  if (sock && sock.readyState === WebSocket.OPEN) startSync(6);
+  if (wasRunning) toast(LINES.resynced);
+});
+
+/* ---------- 14. 啟動 ---------- */
+
+// iPhone 的 Safari（Chrome 在 iPhone 上也是同一個引擎）沒有安裝提示，
+// 自己補一句。已經從主畫面開啟的就不用再講。
+const onIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const standalone = navigator.standalone === true
+  || matchMedia('(display-mode: standalone)').matches;
+if (onIOS && !standalone){
+  $('homeHint').textContent = LINES.addHome;
+  $('homeHint').style.display = '';
+}
+
+/* ---------- 外觀：深色 / 淺色 ---------- */
+// 只負責記住選擇並換掉 html 上的屬性，實際配色全部交給 CSS。
+function currentMode(){
+  return document.documentElement.dataset.mode === 'dark' ? 'dark' : 'light';
+}
+
+function paintModePick(){
+  const m = currentMode();
+  $('modeLight').classList.toggle('on', m === 'light');
+  $('modeDark').classList.toggle('on', m === 'dark');
+}
+
+function setMode(m){
+  if (m !== 'dark' && m !== 'light') return;
+  try { localStorage.setItem('mmMode', m); } catch(e){}
+  location.reload();   // 配色變數是載入時一次套用的，重整最乾淨
+}
+
+$('modeLight').onclick = () => setMode('light');
+$('modeDark').onclick  = () => setMode('dark');
+paintModePick();
+
+/* ---------- 語言 ---------- */
+// 跟深淺色一樣：記下選擇、重新整理，載入時整頁換成那個語言
+$('langZh').classList.toggle('on', LANG === 'zh');
+$('langEn').classList.toggle('on', LANG === 'en');
+function setLang(l){
+  if (l === LANG) return;
+  try { localStorage.setItem('mmLang', l); } catch(e){}
+  location.reload();
+}
+$('langZh').onclick = () => setLang('zh');
+$('langEn').onclick = () => setLang('en');
+
+// 伺服器設定只有 app 才用得到，瀏覽器開的不顯示
+if (IS_APP) $('serverArea').style.display = '';
+
+function showServerBox(force){
+  $('serverArea').style.display = '';
+  $('serverBox').style.display = '';
+  $('serverInput').value = localStorage.getItem('mmServer') || SERVER_URL || '';
+  if (force) showError(LINES.noServer);
+}
+
+$('serverToggle').onclick = () => {
+  const b = $('serverBox');
+  if (b.style.display === 'none') showServerBox(false);
+  else b.style.display = 'none';
+};
+
+$('serverSave').onclick = () => {
+  let v = $('serverInput').value.trim().replace(/\/+$/, '');
+  if (v && !/^https?:\/\//.test(v)) v = 'https://' + v;
+  if (!v){ localStorage.removeItem('mmServer'); }
+  else { localStorage.setItem('mmServer', v); }
+  $('serverBox').style.display = 'none';
+  if (sock) { try { sock.close(); } catch(e){} }
+  retry = 0;
+  connect();
+};
+$('serverInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('serverSave').click(); });
+
+const fromLink = location.hash.slice(1).toUpperCase();
+if (/^[A-Z0-9]{4}$/.test(fromLink)) $('code').value = fromLink;
+applyI18n();
+renderBeats();
+renderSubs();
+renderRamp();
+renderMute();
+renderCount();
+renderSongs();
+paintTempo(st.bpm, null);
+connect();
+
+/* ---------- 預備拍的聲音 ----------
+   作者錄的小鼓邊敲擊（小鼓邊敲擊聲.wav 裡 6.18 秒那一下，沒有削峰的一下）。
+   已經處理過：單聲道 44.1kHz、起音前只留 0.5 毫秒、長 0.22 秒、後 0.08 秒淡出、峰值 0.95。
+   起音前不能留空白：多 30 毫秒，預備拍聽起來就會比大家慢。
+   要換聲音的話，照同樣方式處理好之後，把 base64 換掉就好。 */
+const COUNT_SAMPLE_WAV = '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2v+//8D/2P/5/xsAKgAgABwAJwAuACMABQDs//D/CQAgACMAGQAYAB0AFwARABEACAD//w8AMwBOAE4AOQAnACUALwAvABYA/v8CABwAMwA0ABsABQAMACAAKgAYAPf/8v8IABUAGAAiAC0ANgA1ACQADwAAAAQAHwAwADYAVABuAFAAFAD0//3/EAAQAAsAFgAkACsALQAnACcAKgAcAAoADQAWABoAHgAkACkAHwD2/8b/sP+7/9r/+v8KABYAIwAjAAwA6v/Z/+L/8P8EACgARQBFADsALQAeABkAIgAxADYAJwAUAA8AEQARAAsA+f/u//f/AwAPABwAGAAOAA0AAgDu/+P/5//3//v/6v/g/+j/6//l/+P/5P/y/wMA///3//j/+/8EABMAJAAzADUAKwAgABEACAAPABsAIQAlACMAHgAXAAQA6//a/83/y//R/9b/1f/Q/8n/wv+9/7//yv/I/77/xf/X/+H/5P/m//D/AAAOAB4ALQAqABoADAD6/+3/7f/v/+7/8v/5/wAABwAGAAEA/f/8//3//P/2//D/6//d/8r/uv+1/8D/zv/S/8//xv/C/+D/CgAOAPr/8v/8/w4AHgAcAA8AAgD2/+7/6//u//f/9f/r/+3/+f8GABgAIwAjACAAHAATAAoACAAJAAYAAAAFAAsAAADz/+7/7//z//T/7P/m/+v/9v////r/7f/n/+j/8/8FABEAEwANAP7/8P/s/+v/8P8DABsAIQATAAkADQAMAP3/8f/x//v/CAAQABMAEwANAAUA///8/wEACwAKAPz/6//n//L//v/+//v/AAAEAAAAAgAMAA8ACAD///r/8v/r//P/AwAGAAEA/f/0/+//+/8KAAsABAD7//v/BAAFAP7/+f/4//7/AQD8//3/BAABAPz/AQADAP7/+f/+/wgACQAAAPr/+P/1//f/AAALABEACgD+//v//v/9//b/9f///wgACwAJAAkABwABAP7/AgACAP3/AQALAAwABQD+//3/BAAKAAoACQADAP3/+//1//P//f8HAAoADQAPAAwACAABAPz//P/9//z//v////f/6v/n//H//f8DAAEAAQAHAAgAAwABAPv/8v/y//r/AAABAP///P/7//r/+f/9/wAAAQD+//f/8//2//z/AgAFAAkADwAMAAAA+f/8/wAA///7//r//f/+//7//v/7//j/+/8CAAQABAAIAAwACQAFAAEA+v/1//H/7P/s//f/BQAKAAgACAALAAsABwAFAAQABQAEAP///P/+//r/8v/w//f/AAABAPv/+//9//3//v/+////BgALAAkAAwD7//j/AQAGAAIA//8AAAEA/v/3//L/9////wQAAwD///v//P///wEAAgABAAAAAwAHAAkACQAIAAQAAQAAAP//AAAGAAUAAAD9//n/9v/4//z///////z//f8CAAUABAAEAAUABgADAAEA/v/7//3/AgAEAAMAAwAAAP3//f///wEAAwAHAAkABgADAAQABgAFAAMAAgD///3//P/7//r/+//8//n/9//1//T/9/8CAAsACwAGAAEA/v/+//7/////////AQACAAEA/v/7//z/AAABAAMABgAGAAUACAAJAAYAAgD/////AAD//////////wAA///9////AAAAAAAA///+//7//f/7//z//v///wIABAAFAAYABAAEAAQAAwAAAAAABAAHAAYAAwACAAIAAgACAAIAAwADAAAA/P/9/wEABAADAAIAAAD//wAAAQACAAIAAgACAAMAAQD/////AAD/////AQABAAEAAAAAAAEAAgABAAEAAQABAP///f/9////AAAAAAEAAQAAAP//AAACAAIAAgADAAQAAwAAAP3//f/+////AQABAAAA/////wIABAACAAEAAwACAAAAAQABAAEAAQABAAEAAgACAAEAAQAAAAEAAgACAAIAAwADAAEAAQAEAAYABQADAAMAAgADAAMAAwABAAAA///+////AAAAAAEAAQACAAIAAwADAAQAAwACAAMAAwACAAIAAgABAAEAAgACAAIAAwACAAEAAQABAAAAAAAAAAAAAQACAAIAAgABAAEAAQACAAIAAgAAAP///////////////////////wAAAAAAAAEAAgACAAEAAQABAAEAAQABAAEAAQABAAEAAQAAAAAAAQABAAIAAQAAAAAAAAD/////////////AAAAAAEAAAD//////v/+//7//v////7//v///////v/+//7////////////////////+//7//v//////////////AAAAAAAA///+//7//v/+//7//v/9//3//f/9//3//v/+//7//v////////8AAAAA//////7//v////7//v/+//7//v/+//7////////////////////////////+/////////wAAAAD/////AAD+//3//f/9//3//f/9//3//v//////AAD//////v/+///////+//////////7//v/+//7//////wAA////////AAAAAAAAAAAAAAAAAAAAAAAA///////////////////+/////////////////wAAAAABAAEAAQABAAAAAAAAAAAAAAAAAAAA////////AAAAAAAAAAAAAAAAAAAAAAAA//////////////////////////8AAP///v/+//7//v/+//7//v/+//3//v/+//7//v//////AAAAAAAAAAAAAAAAAAD////////+//7//v/+//7/////////////////AAAAAAAA//////////////////8AAP//AAAAAAAAAAAAAAAAAQABAAEAAgACAAEAAgACAAEAAQABAAEAAQABAAEAAgACAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAQABAAEAAAAAAAAAAAD/////AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAEAAQABAAEAAQABAAEAAQABAAEAAAAAAAEAAQABAAEAAQABAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAQABAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD//wAAAAD/////AAAAAAAAAAAAAAAAAAAAAAAAAAD//////////////////wAAAAAAAP//AAD//////////////////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+</script>
+
+</body>
+</html>
