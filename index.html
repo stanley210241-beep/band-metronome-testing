@@ -251,6 +251,16 @@ html[data-mode="light"] body.in-room .tabbar{background:color-mix(in srgb,var(--
   border-color:var(--line);box-shadow:0 -10px 30px rgba(var(--shadow-rgb),.10)}
 html[data-mode="light"] .tab{color:var(--mute)}
 html[data-mode="light"] .tab.on,html[data-mode="light"] .tab.beat.down{color:var(--brass)}
+.tab{transition:background .2s ease,color .2s ease}
+
+/* 按下的回饋：手指一碰就縮一下，放開彈回來（程式加 .pressed／.released）。
+   iPhone 的 :active 常常來不及顯示，所以不靠它 */
+.pressed{transform:scale(var(--press,.93)) !important;filter:brightness(.94)}
+.released{animation:pressOut .26s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pressOut{from{transform:scale(var(--press,.93))}to{transform:scale(1)}}
+.btn,#play,.setbar-btn,.sound,.song-main,#room summary{--press:.97}
+.tab,.cell{--press:.9}
+@media (prefers-reduced-motion:reduce){ .pressed{transform:none !important} .released{animation:none} }
 /* 重音提示列：左邊說明，右邊「全部取消」 */
 .accrow{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
 .accrow .btn-link{flex:0 0 auto;margin:0;padding:.2rem 0;font-size:.74rem;white-space:nowrap}
@@ -1860,7 +1870,7 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
       <div class="beatrow" id="beatRow"></div>
 
       <div class="accrow">
-        <p class="hint" style="margin:0;font-size:.74rem" data-i18n="accHint">點格子切換重音，有重音時第一拍一定是重音</p>
+        <p class="hint" style="margin:0;font-size:.74rem" data-i18n="accHint">點格子切換重音</p>
         <button class="btn-link" id="accClear" data-i18n="accClear">全部取消</button>
       </div>
 
@@ -1920,8 +1930,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
           </span>
         </div>
       </div>
-      <p class="hint" data-i18n="countHint">預備拍每一拍都是重音、不響細分，畫面會顯示「預備」。循環時就是【預備】【樂句】【預備】【樂句】…
-        一直重複；靜音訓練從樂句第一小節開始數，漸快只算樂句的小節。</p>
     </details>
 
     <!-- 漸快訓練 -->
@@ -1951,8 +1959,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         <input id="targetRange" type="range" min="15" max="600" step="1" value="160" aria-label="目標速度" data-i18n-aria="targetAria">
         <input class="val numin" id="targetVal" value="160" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" enterkeyhint="done" autocomplete="off" aria-label="目標速度" data-i18n-aria="targetAria">
       </div>
-      <p class="hint" data-i18n="rampHint">速度由每支手機自己依同一組參數推算，所以加速的瞬間不會斷拍。
-        到達目標之後就維持不變。</p>
     </details>
 
     <!-- 靜音訓練 -->
@@ -1977,9 +1983,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
           <span data-i18n="muteBars">小節</span>
         </span>
       </div>
-      <p class="hint" data-i18n="muteHint">靜音的那幾小節拍子照走，只是不出聲。畫面上的格子會用比較暗的
-        方式繼續跑，讓你知道現在在第幾拍。這是練內在節奏最有效的方法之一——
-        撐過去之後聲音回來，就知道自己有沒有跑掉。</p>
     </details>
 
     <!-- 耳機延遲 -->
@@ -2014,9 +2017,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
           <button id="songSave" data-i18n="songSave">存下目前設定</button>
         </div>
         <p class="hint cloud-state" id="songCloud"></p>
-        <p class="hint" data-i18n="songHint1">點一首會把速度、拍數、重音、細分、漸快、預備拍設定一次套用到整個房間。</p>
-        <p class="hint" data-i18n="songHint2">存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。
-          長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。</p>
         <!-- 文字放在 span 裡：英文版換字時只換 span，才不會把圖示一起蓋掉 -->
         <div class="linkrow iorow">
           <button class="iobtn" id="songExport">
@@ -2028,7 +2028,7 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
             <span data-i18n="importBtn">匯入</span>
           </button>
         </div>
-        <textarea id="songBox" placeholder="匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。" data-i18n-ph="songBoxPh"></textarea>
+        <textarea id="songBox" placeholder="匯出的文字會出現在這裡，貼上後按匯入" data-i18n-ph="songBoxPh"></textarea>
       </details>
 
       <!-- 歌單（Set）：把曲目排成「11/3 生日演出」這種清單，表演時一鍵切下一首 -->
@@ -2051,7 +2051,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
             <button id="setAdd" data-i18n="setAdd">加入</button>
           </div>
         </div>
-        <p class="hint" data-i18n="setHint">點歌單就會開始：節拍器上方會出現「下一首」，按一下全房換成下一首的速度、拍號和重音。按 ✎ 可以加歌、排順序。</p>
       </details>
 
       <!-- 耗時計算（每個人自己的，不同步） -->
@@ -2075,9 +2074,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
           <span data-i18n="secUnit">秒</span>
         </div>
         <p class="calc-out" id="calcOut"></p>
-        <p class="hint" data-i18n="calcHint">「目前速度」平常跟房間一樣；想算「打 150 會多長」可以直接輸入試算，
-          不會改到房間，房間速度一變就會跟回去。開了漸快訓練的話，算的是起始速度。
-          原曲速度和長度只存在你自己的裝置裡。</p>
       </details>
     </div>
 
@@ -2440,7 +2436,7 @@ const UI_ZH = {
   stop:        '停止',
 
   // 拍子與重音
-  accHint:     '點格子切換重音，有重音時第一拍一定是重音',
+  accHint:     '點格子切換重音',
   accClear:    '全部取消',
   beatsBefore: '每小節',
   beatsAfter:  '拍',
@@ -2462,8 +2458,7 @@ const UI_ZH = {
   secUnit:     '秒',
   minAria:     '原曲長度，分',
   secAria:     '原曲長度，秒',
-  calcHint:    '「目前速度」平常跟房間一樣；想算「打 150 會多長」可以直接輸入試算，不會改到房間，房間速度一變就會跟回去。開了漸快訓練的話，算的是起始速度。原曲速度和長度只存在你自己的裝置裡。',
-  calcEmpty:   '填上原曲的速度和長度，就會算出用目前速度演奏全曲要多久。',
+  calcEmpty:   '填上原曲速度和長度，算出全曲要多久',
   calcPct:     pct => '目前速度是原曲的 ' + pct + '%',
   calcTotal:   '全曲約 ',
   calcSame:    '跟原曲一樣長',
@@ -2476,15 +2471,13 @@ const UI_ZH = {
   songCount:   n => n + ' 首',
   songNamePh:  '曲名',
   songSave:    '存下目前設定',
-  songHint1:   '點一首會把速度、拍數、重音、細分、漸快、預備拍設定一次套用到整個房間。',
-  songHint2:   '存的速度：「耗時」有填原曲速度就用它，沒填就用目前速度；兩個不一樣會問你。長度從「耗時」帶過來。之後點這首，會把速度和長度填回「耗時」。',
   songInfo:    (bpm, beats) => bpm + ' BPM · 每小節 ' + beats + ' 拍',
   songLen:     t => ' · 全長 ' + t,
   moveUp:      '往上移',
   remove:      '刪除',
   exportBtn:   '匯出',
   importBtn:   '匯入',
-  songBoxPh:   '匯出後這裡會出現一段文字，複製給團員。他們貼進來按匯入就有同一份清單。',
+  songBoxPh:   '匯出的文字會出現在這裡，貼上後按匯入',
   applied:     name => '已套用「' + name + '」',
   saved:       name => '已存下「' + name + '」',
   copied:      '已複製到剪貼簿',
@@ -2508,7 +2501,6 @@ const UI_ZH = {
   phraseLess:     '樂句少一小節',
   phraseMore:     '樂句多一小節',
   phraseAria:     '樂句幾小節',
-  countHint:      '預備拍每一拍都是重音、不響細分，畫面會顯示「預備」。循環時就是【預備】【樂句】【預備】【樂句】…一直重複；靜音訓練從樂句第一小節開始數，漸快只算樂句的小節。',
   countOnceLabel: bars => '預備 ' + bars + ' 小節',
   countLoopLabel: (bars, phrase) => '每 ' + phrase + ' 小節前預備 ' + bars,
   countNow:       (k, all) => '預備 ' + k + '／' + all,
@@ -2529,7 +2521,6 @@ const UI_ZH = {
   stepValAria: '每次加多少 BPM',
   playValAria: '有聲小節數',
   restValAria: '靜音小節數',
-  rampHint:    '速度由每支手機自己依同一組參數推算，所以加速的瞬間不會斷拍。到達目標之後就維持不變。',
   rampLabel:   (bars, step, target) => '每 ' + bars + ' 小節 +' + step + ' 到 ' + target,
 
   // 靜音訓練
@@ -2541,7 +2532,6 @@ const UI_ZH = {
   playMore:    '增加有聲小節',
   restLess:    '減少靜音小節',
   restMore:    '增加靜音小節',
-  muteHint:    '靜音的那幾小節拍子照走，只是不出聲。畫面上的格子會用比較暗的方式繼續跑，讓你知道現在在第幾拍。這是練內在節奏最有效的方法之一——撐過去之後聲音回來，就知道自己有沒有跑掉。',
   muteLabel:   (play, rest) => '每 ' + play + ' 小節靜音 ' + rest,
 
   // 耳機延遲
@@ -2562,7 +2552,6 @@ const UI_ZH = {
   setAdd:      '加入',
   setAddAria:  '選一首曲目加進歌單',
   setAddPh:    '選一首曲目…',
-  setHint:     '點歌單就會開始：節拍器上方會出現「下一首」，按一下全房換成下一首的速度、拍號和重音。按 ✎ 可以加歌、排順序。',
   setInfo:     (n, total) => n + ' 首' + (total ? ' · 全長 ' + total : ''),
   setEmpty:    '這個歌單還沒有曲目，從下面選一首加進來。',
   setMissing:  '（這首曲目已經刪除了）',
@@ -2588,9 +2577,9 @@ const UI_ZH = {
   acctAria:    name => '帳號：' + name + '，點一下打開選單',
   cloudShort:  '☁ 曲目會自動同步到雲端',
   cloudHint:   '登入後，曲目會存在雲端，換手機、換電腦都看得到。',
-  cloudOn:     mail => '☁ 曲目已同步到雲端（' + mail + '）',
-  cloudOff:    '曲目只存在這支裝置。回首頁用 Google 登入，就能存到雲端。',
-  cloudErr:    '雲端同步暫時失敗，曲目先存在這支裝置，之後會再試。',
+  cloudOn:     mail => '☁ 已同步（' + mail + '）',
+  cloudOff:    '只存在這支裝置，登入後會同步到雲端',
+  cloudErr:    '雲端同步暫時失敗，之後會再試',
   cloudLoading:'正在讀取雲端的曲目…',
 
   share:       '複製邀請連結',
@@ -2644,7 +2633,7 @@ const UI_EN = {
   start:       'Start',
   stop:        'Stop',
 
-  accHint:     'Tap a cell to toggle accents. With any accent, beat 1 is always accented.',
+  accHint:     'Tap cells to set accents',
   accClear:    'Clear all',
   beatsBefore: 'Beats',
   beatsAfter:  'per bar',
@@ -2665,8 +2654,7 @@ const UI_EN = {
   secUnit:     'sec',
   minAria:     'Original length, minutes',
   secAria:     'Original length, seconds',
-  calcHint:    '“Current” matches the room tempo. Type a number to try it out (say, how long at 150) — the room doesn’t change, and this follows the room again when the room tempo changes. With the speed trainer on, this uses the starting tempo. The original tempo and length stay on your device.',
-  calcEmpty:   'Enter the original tempo and length to see how long the whole song takes at the current tempo.',
+  calcEmpty:   'Enter the original tempo and length',
   calcPct:     pct => 'Current tempo is ' + pct + '% of the original',
   calcTotal:   'Whole song ≈ ',
   calcSame:    'same as the original',
@@ -2678,15 +2666,13 @@ const UI_EN = {
   songCount:   n => n + (n === 1 ? ' song' : ' songs'),
   songNamePh:  'Song name',
   songSave:    'Save current settings',
-  songHint1:   'Tap a song to apply its tempo, beats, accents, subdivision, speed trainer and count-in to the whole room.',
-  songHint2:   'Tempo saved: the original tempo from “Duration” if filled in, otherwise the current tempo — you’ll be asked if they differ. The length comes from “Duration”, and tapping a song fills both back in.',
   songInfo:    (bpm, beats) => bpm + ' BPM · ' + beats + (beats === 1 ? ' beat' : ' beats') + ' per bar',
   songLen:     t => ' · ' + t,
   moveUp:      'Move up',
   remove:      'Delete',
   exportBtn:   'Export',
   importBtn:   'Import',
-  songBoxPh:   'After exporting, text appears here. Send it to your bandmates — they paste it here and tap Import to get the same list.',
+  songBoxPh:   'Exported text appears here. Paste, then tap Import',
   applied:     name => 'Applied “' + name + '”',
   saved:       name => 'Saved “' + name + '”',
   copied:      'Copied to clipboard',
@@ -2709,7 +2695,6 @@ const UI_EN = {
   phraseLess:     'Shorter phrase',
   phraseMore:     'Longer phrase',
   phraseAria:     'Phrase length in bars',
-  countHint:      'Every count-in beat is accented (no subdivisions), and the screen shows “Count-in”. In loop mode it goes [count-in] [phrase] [count-in] [phrase]… forever. The gap trainer counts from the first bar of the phrase; the speed trainer counts phrase bars only.',
   countOnceLabel: bars => bars + (bars === 1 ? ' bar' : ' bars'),
   countLoopLabel: (bars, phrase) => bars + ' before every ' + phrase,
   countNow:       (k, all) => 'Count-in ' + k + ' / ' + all,
@@ -2729,7 +2714,6 @@ const UI_EN = {
   stepValAria: 'BPM added each time',
   playValAria: 'Playing bars',
   restValAria: 'Silent bars',
-  rampHint:    'Every phone works out the tempo from the same settings, so the speed-ups never break the beat. Once it reaches the target, it stays there.',
   rampLabel:   (bars, step, target) => '+' + step + ' every ' + bars + ' bars → ' + target,
 
   muteTitle:   'Gap trainer',
@@ -2740,7 +2724,6 @@ const UI_EN = {
   playMore:    'More playing bars',
   restLess:    'Fewer silent bars',
   restMore:    'More silent bars',
-  muteHint:    'During the silent bars the beat keeps going, just without sound. The cells keep moving in a dimmer color so you know where you are. It’s one of the best ways to train your inner pulse — when the sound comes back, you’ll know if you drifted.',
   muteLabel:   (play, rest) => 'Play ' + play + ', silent ' + rest,
 
   latTitle:    'My headphone delay',
@@ -2758,7 +2741,6 @@ const UI_EN = {
   setAdd:      'Add',
   setAddAria:  'Choose a song to add to the setlist',
   setAddPh:    'Choose a song…',
-  setHint:     'Tap a setlist to start it: a “Next” button appears above the metronome and switches the whole room to the next song’s tempo, meter and accents. Tap ✎ to add songs and reorder.',
   setInfo:     (n, total) => n + (n === 1 ? ' song' : ' songs') + (total ? ' · ' + total : ''),
   setEmpty:    'No songs in this setlist yet. Add one below.',
   setMissing:  '(this song was deleted)',
@@ -2783,9 +2765,9 @@ const UI_EN = {
   acctAria:    name => 'Account: ' + name + '. Tap to open the menu',
   cloudShort:  '☁ Songs sync to the cloud automatically',
   cloudHint:   'Sign in to keep your songs in the cloud, on every phone and computer.',
-  cloudOn:     mail => '☁ Songs synced to the cloud (' + mail + ')',
-  cloudOff:    'Songs are only on this device. Sign in with Google on the home screen to save them to the cloud.',
-  cloudErr:    'Cloud sync failed for now. Songs are kept on this device and will sync later.',
+  cloudOn:     mail => '☁ Synced (' + mail + ')',
+  cloudOff:    'On this device only. Sign in to sync',
+  cloudErr:    'Cloud sync failed. Will retry',
   cloudLoading:'Loading your songs from the cloud…',
 
   share:       'Copy invite link',
@@ -2807,7 +2789,7 @@ const LINES_ZH = {
   lockSide:   '鎖沒有辦法從這一側打開。',
   nowOwner:   '房主離開了，現在由你接手。',
   signInFail: '登入沒有成功，再試一次看看。',
-  noSets:     '還沒有歌單。取個名字，例如「11/3 生日演出」，再把曲目加進去。',
+  noSets:     '還沒有歌單。',
   noSetName:  '歌單也要有名字，不然表演那天會找不到。',
   setDeleteAsk: name => '要刪除歌單「' + name + '」嗎？（裡面的曲目不會被刪掉）',
   setNoSongs: '還沒有曲目，先到「曲目」存幾首',
@@ -2858,7 +2840,7 @@ const LINES_EN = {
   lockSide:   'This lock can’t be opened from this side.',
   nowOwner:   'The host left. You’re in charge now.',
   signInFail: 'Sign-in didn’t go through. Please try again.',
-  noSets:     'No setlists yet. Give one a name, like “Nov 3 birthday gig”, then add songs.',
+  noSets:     'No setlists yet.',
   noSetName:  'A setlist needs a name, or you won’t find it on gig night.',
   setDeleteAsk: name => 'Delete the setlist “' + name + '”? (The songs themselves stay.)',
   setNoSongs: 'No songs yet. Save a few under “Songs” first',
@@ -4906,6 +4888,32 @@ function pulseTab(down){
   clearTimeout(tabBeatTimer);
   tabBeatTimer = setTimeout(() => b.classList.remove('beat', 'down'), 110);
 }
+
+/* ---------- 按下的回饋 ---------- */
+// 手指一碰到按鈕就縮一下，放開再彈回來。點得很快也至少看得到 0.1 秒，才有「按到了」的感覺
+const PRESSABLE = 'button, summary, [role="button"]';
+document.addEventListener('pointerdown', e => {
+  const el = e.target.closest(PRESSABLE);
+  if (!el || el.disabled) return;
+  const t0 = performance.now();
+  el.classList.remove('released');
+  el.classList.add('pressed');
+  const up = () => {
+    removeEventListener('pointerup', up);
+    removeEventListener('pointercancel', up);
+    setTimeout(() => {
+      el.classList.remove('pressed');
+      el.classList.add('released');
+    }, Math.max(0, 100 - (performance.now() - t0)));
+  };
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', up);
+}, { passive: true });
+document.addEventListener('animationend', e => {
+  if (e.animationName === 'pressOut') e.target.classList.remove('released');
+});
+// 換分頁時手機輕震一下（Android 才有；iPhone 的網頁不支援震動）
+$('tabBar').addEventListener('click', () => { try { navigator.vibrate && navigator.vibrate(8); } catch(e){} });
 
 function showError(msg, hot){
   const el = $('gateErr');
