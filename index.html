@@ -2064,7 +2064,7 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         </div>
         <div class="saverow calcrow">
           <span data-i18n="nowTempo">目前速度</span>
-          <input id="calcNow" type="text" inputmode="numeric" maxlength="3" autocomplete="off" enterkeyhint="done" aria-label="目前速度，跟房間的速度連動" data-i18n-aria="nowTempoAria">
+          <input id="calcNow" type="text" inputmode="numeric" maxlength="3" autocomplete="off" enterkeyhint="done" aria-label="目前速度，平常跟房間一樣，可以輸入試算" data-i18n-aria="nowTempoAria">
           <span>BPM</span>
         </div>
         <div class="saverow calcrow">
@@ -2075,8 +2075,8 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
           <span data-i18n="secUnit">秒</span>
         </div>
         <p class="calc-out" id="calcOut"></p>
-        <p class="hint" data-i18n="calcHint">「目前速度」跟房間的速度連動：節拍器頁的速度變了，這裡會跟著變；
-          改這裡也會改整個房間的速度。開了漸快訓練的話，算的是起始速度。
+        <p class="hint" data-i18n="calcHint">「目前速度」平常跟房間一樣；想算「打 150 會多長」可以直接輸入試算，
+          不會改到房間，房間速度一變就會跟回去。開了漸快訓練的話，算的是起始速度。
           原曲速度和長度只存在你自己的裝置裡。</p>
       </details>
     </div>
@@ -2456,13 +2456,13 @@ const UI_ZH = {
   unset:       '未設定',
   origTempo:   '原曲速度',
   nowTempo:    '目前速度',
-  nowTempoAria:'目前速度，跟房間的速度連動',
+  nowTempoAria:'目前速度，平常跟房間一樣，可以輸入試算',
   origLen:     '原曲長度',
   minUnit:     '分',
   secUnit:     '秒',
   minAria:     '原曲長度，分',
   secAria:     '原曲長度，秒',
-  calcHint:    '「目前速度」跟房間的速度連動：節拍器頁的速度變了，這裡會跟著變；改這裡也會改整個房間的速度。開了漸快訓練的話，算的是起始速度。原曲速度和長度只存在你自己的裝置裡。',
+  calcHint:    '「目前速度」平常跟房間一樣；想算「打 150 會多長」可以直接輸入試算，不會改到房間，房間速度一變就會跟回去。開了漸快訓練的話，算的是起始速度。原曲速度和長度只存在你自己的裝置裡。',
   calcEmpty:   '填上原曲的速度和長度，就會算出用目前速度演奏全曲要多久。',
   calcPct:     pct => '目前速度是原曲的 ' + pct + '%',
   calcTotal:   '全曲約 ',
@@ -2659,13 +2659,13 @@ const UI_EN = {
   unset:       'Not set',
   origTempo:   'Original',
   nowTempo:    'Current',
-  nowTempoAria:'Current tempo, linked to the room tempo',
+  nowTempoAria:'Current tempo, follows the room; type to try another',
   origLen:     'Length',
   minUnit:     'min',
   secUnit:     'sec',
   minAria:     'Original length, minutes',
   secAria:     'Original length, seconds',
-  calcHint:    '“Current” is linked to the room tempo: when the tempo changes on the Metronome tab it follows; change it here and the whole room changes. With the speed trainer on, this uses the starting tempo. The original tempo and length stay on your device.',
+  calcHint:    '“Current” matches the room tempo. Type a number to try it out (say, how long at 150) — the room doesn’t change, and this follows the room again when the room tempo changes. With the speed trainer on, this uses the starting tempo. The original tempo and length stay on your device.',
   calcEmpty:   'Enter the original tempo and length to see how long the whole song takes at the current tempo.',
   calcPct:     pct => 'Current tempo is ' + pct + '% of the original',
   calcTotal:   'Whole song ≈ ',
@@ -5117,9 +5117,15 @@ function fillCalc(bpm, sec){
   fillLength(sec);
 }
 
+// 「目前速度」可以自己打一個數字試算（例如「打 150 會多長」），只影響這裡的計算、不會改房間。
+// 房間速度一變，就丟掉試算的數字、跟回房間的速度。
+let calcTry = null, calcRoomSeen = null;
+
 function updateCalc(){
   const { bpm, sec } = readCalc();
-  const now = Number($('bpmRange').value);
+  const room = Number($('bpmRange').value);
+  if (room !== calcRoomSeen){ calcRoomSeen = room; calcTry = null; }
+  const now = calcTry || room;
   // 「目前速度」跟著房間的速度走；正在打字的時候不要蓋掉
   if (document.activeElement !== $('calcNow')) $('calcNow').value = now;
   const out = $('calcOut');
@@ -5155,26 +5161,18 @@ for (const id of ['calcBpm', 'calcMin', 'calcSec']){
   });
 }
 
-// 「目前速度」改了就改整個房間的速度，規則跟點大數字輸入一樣。
-// 打字的過程中不送，按 Enter／完成或離開這格才算數。
+// 「目前速度」打字就馬上重算，但只是試算，不送給房間。
+// 超出 15–600 的數字不算；離開這格時空白或不合理的話，改回房間的速度。
 $('calcNow').addEventListener('input', e => {
   e.target.value = e.target.value.replace(/\D/g, '');
+  const v = Number(e.target.value);
+  calcTry = v >= BPM_MIN && v <= BPM_MAX ? v : null;
+  updateCalc();
 });
 $('calcNow').addEventListener('keydown', e => {
   if (e.key === 'Enter'){ e.preventDefault(); e.target.blur(); }
 });
-$('calcNow').addEventListener('change', e => {
-  const raw = e.target.value.trim();
-  if (raw !== ''){
-    const v = Number(raw);
-    if (canControl()){
-      if (v < BPM_MIN) toast(LINES.typedSlow);
-      else if (v > BPM_MAX) toast(LINES.typedFast);
-    }
-    setBpm(v);          // 上鎖時會在這裡被擋下
-  }
-  updateCalc();         // 空白、被擋下或被夾到上下限，都要把格子改回實際的速度
-});
+$('calcNow').addEventListener('blur', () => updateCalc());
 updateCalc();
 
 function setBeats(n){
