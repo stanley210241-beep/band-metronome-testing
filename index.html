@@ -146,20 +146,31 @@ html[lang="en"] #room .roomcode .role::before{display:none}
 #room details label.setrow span{flex:1;min-width:0}
 /* 英文版的標題本身就是 Sync Metronome，上方那行小字會重複 */
 html[lang="en"] .mark::before{display:none}
-/* 首頁的 Google 帳號區 */
-.account{display:flex;flex-direction:column;align-items:center;gap:.5rem;margin-top:-.6rem}
+/* 首頁卡片：原本卡片（#gate::before）是用「畫面高度的百分比」往內縮，內容一多就超出卡片。
+   改成卡片永遠包住整個首頁，內容留在卡片內側的留白裡 */
+#gate::before{inset:0 !important}
+#gate{padding-top:4.2rem !important;padding-bottom:2.2rem !important}
+
+/* 首頁右上角的 Google 帳號 */
+.account{position:absolute;top:1rem;right:1rem;z-index:2}
 .account[hidden],.account [hidden]{display:none !important}
-.gbtn{display:inline-flex;align-items:center;justify-content:center;gap:.6rem;width:auto;
-  padding:.7rem 1.3rem;font-size:.95rem}
-.gbtn svg{width:1.2rem;height:1.2rem;flex:0 0 auto}
-.acct{display:flex;align-items:center;gap:.7rem;padding:.5rem .8rem;border-radius:999px;
-  border:1px solid var(--line);background:color-mix(in srgb, var(--card-soft) 80%, transparent);max-width:100%}
-.acct img{width:2rem;height:2rem;border-radius:50%;flex:0 0 auto;object-fit:cover}
-.acct-who{display:flex;flex-direction:column;min-width:0;text-align:left;line-height:1.25}
-.acct-who b{font-size:.9rem;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct-who small{font-size:.72rem;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct .btn-link{flex:0 0 auto;margin:0;font-size:.8rem}
-.account .hint{margin:0;max-width:22rem}
+.acct-chip{display:inline-flex;align-items:center;justify-content:center;gap:.45rem;
+  height:2.3rem;padding:0 .9rem;border-radius:999px;font-size:.85rem;font-weight:600;
+  border:1px solid var(--line);background:var(--card);color:var(--navy);
+  box-shadow:0 4px 12px rgba(var(--shadow-rgb, 0,0,0),.08)}
+.acct-chip svg{width:1.05rem;height:1.05rem;flex:0 0 auto}
+.acct-me{width:2.3rem;padding:0;overflow:hidden}
+.acct-me img{width:100%;height:100%;object-fit:cover;display:block}
+.acct-me span{font-family:var(--display);font-weight:700;font-size:1rem;color:var(--brass)}
+.acct-menu{position:absolute;top:calc(100% + .5rem);right:0;width:max-content;max-width:min(17rem,calc(100vw - 3rem));
+  display:flex;flex-direction:column;align-items:flex-start;gap:.15rem;text-align:left;
+  padding:.85rem 1rem;border-radius:16px;border:1px solid var(--line);background:var(--card);
+  box-shadow:0 16px 40px rgba(var(--shadow-rgb, 0,0,0),.18)}
+.acct-menu b{font-size:.95rem;color:var(--navy);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-menu small{font-size:.75rem;color:var(--mute);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-cloud{margin:.5rem 0 .3rem;font-size:.75rem;color:var(--mute);line-height:1.4}
+.acct-cloud.err{color:var(--alert)}
+.acct-menu .btn-link{margin:0;padding:.2rem 0;font-size:.85rem}
 /* 曲目面板裡的雲端同步狀態 */
 #room details .cloud-state{margin-top:.6rem}
 #room details .cloud-state.err{color:var(--alert) !important}
@@ -1669,6 +1680,24 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
   <!-- ========== 加入畫面 ========== -->
   <!-- 文字是中文版；英文版載入時依 data-i18n / data-i18n-ph / data-i18n-aria 換掉（見「語言」那段） -->
   <section id="gate" class="screen on">
+    <!-- Google 帳號：放在卡片右上角。登入後曲目存在雲端。
+         Firebase 還沒載入（或連不上）時整區隱藏，節拍器照常能用 -->
+    <div id="accountArea" class="account" hidden>
+      <button id="signInBtn" class="acct-chip gbtn">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        <span data-i18n="signInShort">登入</span>
+      </button>
+      <!-- 登入後只顯示大頭照，點一下展開帳號選單 -->
+      <button id="acctBtn" class="acct-chip acct-me" aria-haspopup="true" aria-expanded="false" hidden>
+        <img id="acctPhoto" alt="" referrerpolicy="no-referrer"><span id="acctInitial" aria-hidden="true"></span>
+      </button>
+      <div id="acctMenu" class="acct-menu" hidden>
+        <b id="acctName"></b>
+        <small id="acctMail"></small>
+        <p class="acct-cloud" id="acctCloud"></p>
+        <button id="signOutBtn" class="btn-link" data-i18n="signOut">登出</button>
+      </div>
+    </div>
     <!-- 名稱用 bdi 包：.mark span 在好幾層樣式裡都被指定成小字副標，不能用 span -->
     <h1 class="mark"><bdi data-i18n="appName">同步節拍器</bdi>
       <span data-i18n="tagline">同一個房間的人，耳機裡聽到同一拍。</span>
@@ -1692,19 +1721,6 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
       <button class="modebtn" id="langEn" lang="en">English</button>
     </div>
 
-    <!-- Google 帳號：登入後曲目存在雲端。Firebase 還沒載入（或連不上）時整區隱藏，節拍器照常能用 -->
-    <div id="accountArea" class="account" hidden>
-      <button id="signInBtn" class="btn btn-quiet gbtn">
-        <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
-        <span data-i18n="signIn">用 Google 登入</span>
-      </button>
-      <div id="accountBox" class="acct" hidden>
-        <img id="acctPhoto" alt="" referrerpolicy="no-referrer">
-        <div class="acct-who"><b id="acctName"></b><small id="acctMail"></small></div>
-        <button id="signOutBtn" class="btn-link" data-i18n="signOut">登出</button>
-      </div>
-      <p class="hint" id="accountHint" data-i18n="cloudHint">登入後，曲目會存在雲端，換手機、換電腦都看得到。</p>
-    </div>
 
     <div id="serverArea" style="display:none">
       <button class="btn-link" id="serverToggle" data-i18n="serverToggle">伺服器設定</button>
@@ -2394,7 +2410,10 @@ const UI_ZH = {
   // 最下面
   // 帳號與雲端
   signIn:      '用 Google 登入',
+  signInShort: '登入',
   signOut:     '登出',
+  acctAria:    name => '帳號：' + name + '，點一下打開選單',
+  cloudShort:  '☁ 曲目會自動同步到雲端',
   cloudHint:   '登入後，曲目會存在雲端，換手機、換電腦都看得到。',
   cloudOn:     mail => '☁ 曲目已同步到雲端（' + mail + '）',
   cloudOff:    '曲目只存在這支裝置。回首頁用 Google 登入，就能存到雲端。',
@@ -2559,7 +2578,10 @@ const UI_EN = {
   latHint2:    'Can’t hear it? Try better-isolating headphones before turning the volume up. Long exposure to loud sound damages hearing permanently.',
 
   signIn:      'Sign in with Google',
+  signInShort: 'Sign in',
   signOut:     'Sign out',
+  acctAria:    name => 'Account: ' + name + '. Tap to open the menu',
+  cloudShort:  '☁ Songs sync to the cloud automatically',
   cloudHint:   'Sign in to keep your songs in the cloud, on every phone and computer.',
   cloudOn:     mail => '☁ Songs synced to the cloud (' + mail + ')',
   cloudOff:    'Songs are only on this device. Sign in with Google on the home screen to save them to the cloud.',
@@ -3956,25 +3978,48 @@ async function initCloud(){
 
 function renderAccount(){
   $('signInBtn').hidden = !!user;
-  $('accountBox').hidden = !user;
-  $('accountHint').hidden = !!user;
+  $('signInBtn').title = UI.cloudHint;
+  $('acctBtn').hidden = !user;
+  if (!user) showAcctMenu(false);
   if (user){
     $('acctName').textContent = user.displayName || '';
     $('acctMail').textContent = user.email || '';
-    const photo = $('acctPhoto');
-    if (user.photoURL){ photo.src = user.photoURL; photo.hidden = false; } else photo.hidden = true;
+    $('acctBtn').setAttribute('aria-label', UI.acctAria(user.displayName || user.email || ''));
+    // 有大頭照就用；沒有的話顯示名字的第一個字
+    const photo = $('acctPhoto'), initial = $('acctInitial');
+    photo.hidden = !user.photoURL;
+    if (user.photoURL) photo.src = user.photoURL;
+    initial.hidden = !!user.photoURL;
+    initial.textContent = (user.displayName || user.email || '?').trim().charAt(0).toUpperCase();
   }
   renderCloudState();
 }
 
 function renderCloudState(){
   const el = $('songCloud');
-  el.classList.toggle('err', cloudState === 'error');
-  el.textContent = !user ? UI.cloudOff
+  const text = !user ? UI.cloudOff
     : cloudState === 'loading' ? UI.cloudLoading
     : cloudState === 'error' ? UI.cloudErr
     : UI.cloudOn(user.email || '');
+  el.classList.toggle('err', cloudState === 'error');
+  el.textContent = text;
+  // 首頁帳號選單裡也顯示一份（不重複寫信箱）
+  const menu = $('acctCloud');
+  menu.classList.toggle('err', cloudState === 'error');
+  menu.textContent = !user ? '' : cloudState === 'loading' ? UI.cloudLoading
+    : cloudState === 'error' ? UI.cloudErr : UI.cloudShort;
 }
+
+// 帳號選單：點大頭照打開，點其他地方或按 Esc 關掉
+function showAcctMenu(open){
+  $('acctMenu').hidden = !open;
+  $('acctBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+$('acctBtn').onclick = e => { e.stopPropagation(); showAcctMenu($('acctMenu').hidden); };
+document.addEventListener('click', e => {
+  if (!$('acctMenu').hidden && !$('acctMenu').contains(e.target)) showAcctMenu(false);
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') showAcctMenu(false); });
 
 $('signInBtn').onclick = () => {
   if (!fbAuth) return;
@@ -3993,6 +4038,7 @@ $('signInBtn').onclick = () => {
 };
 
 $('signOutBtn').onclick = () => {
+  showAcctMenu(false);
   stopCloudSync();
   if (fbAuth) fbAuth.signOut();
 };
