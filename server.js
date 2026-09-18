@@ -155,7 +155,7 @@ function createRoom() {
     ramp: { on: false, bars: 4, step: 2, target: 160 },
     mute: { on: false, play: 3, rest: 1 },
     count: { on: false, bars: 1, loop: false, phrase: 4 },
-    now: null,
+    playing: null,
     locked: false,
     owner: null,
     running: false,
@@ -179,7 +179,7 @@ function stateOf(code) {
     ramp: r.ramp,
     mute: r.mute,
     count: r.count,
-    now: r.now,
+    playing: r.playing,
     locked: r.locked,
     running: r.running,
     startAt: r.startAt,
@@ -340,7 +340,7 @@ wss.on('connection', (ws) => {
         if (m.ramp) { const rr = cleanRamp(m.ramp); if (rr) r.ramp = rr; }
         if (m.mute) { const mm = cleanMute(m.mute); if (mm) r.mute = mm; }
         if (m.count) { const cc = cleanCount(m.count); if (cc) r.count = cc; }
-        r.now = cleanNow(m.now);      // 現在是哪一首（全房顯示）；舊版前端沒送就清掉
+        r.playing = cleanNow(m.playing);      // 現在是哪一首（全房顯示）；舊版前端沒送就清掉
         if (r.running) r.startAt = Date.now() + LEAD_MS;
         break;
       }

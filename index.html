@@ -201,8 +201,13 @@ html[lang="en"] .mark::before{display:none}
 /* 曲目面板裡的雲端同步狀態 */
 #room details .cloud-state{margin-top:.6rem}
 #room details .cloud-state.err{color:var(--alert) !important}
-/* 外觀和語言兩組選擇靠近一點，看起來是同一區 */
-#gate .modepick + .modepick{margin-top:-1.3rem}
+/* 首頁左上角：外觀、語言兩顆小開關（高度跟右上角帳號一樣） */
+#gate .prefs{position:absolute;top:1rem;left:1rem;z-index:2;display:flex;gap:.4rem}
+#gate .prefs .modepick{margin:0;padding:3px;gap:2px;height:2.3rem;box-sizing:border-box}
+#gate .prefs .modebtn{min-width:2.1rem;height:100%;padding:0 .5rem;font-size:.78rem;
+  display:inline-flex;align-items:center;justify-content:center}
+#gate .prefs .modebtn svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+#gate .prefs #modeDark svg{fill:currentColor;stroke:none}
 /* 重音提示列：左邊說明，右邊「全部取消」 */
 .accrow{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
 .accrow .btn-link{flex:0 0 auto;margin:0;padding:.2rem 0;font-size:.74rem;white-space:nowrap}
@@ -1738,14 +1743,17 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
     </div>
     <p class="hint" data-i18n="gateHint">用有線耳機最準。藍牙耳機會慢半拍，進房後可以自己微調。</p>
     <p class="hint" id="homeHint" style="display:none"></p>
-    <div class="modepick" role="group" aria-label="外觀" data-i18n-aria="lookAria">
-      <button class="modebtn" id="modeLight" data-mode="light" data-i18n="light">淺色</button>
-      <button class="modebtn" id="modeDark" data-mode="dark" data-i18n="dark">深色</button>
-    </div>
-    <!-- 語言名稱固定用各自的語言寫，不翻譯 -->
-    <div class="modepick" role="group" aria-label="語言" data-i18n-aria="langAria">
-      <button class="modebtn" id="langZh" lang="zh-Hant">繁體中文</button>
-      <button class="modebtn" id="langEn" lang="en">English</button>
+    <!-- 外觀和語言縮成左上角兩顆小開關，跟右上角的帳號對稱，主畫面只留房號和兩個大按鈕 -->
+    <div class="prefs">
+      <div class="modepick" role="group" aria-label="外觀" data-i18n-aria="lookAria">
+        <button class="modebtn" id="modeLight" data-mode="light" aria-label="淺色" data-i18n-aria="light" title="淺色"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M5.3 18.7 7 17M17 7l1.7-1.7"/></svg></button>
+        <button class="modebtn" id="modeDark" data-mode="dark" aria-label="深色" data-i18n-aria="dark" title="深色"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></button>
+      </div>
+      <!-- 語言名稱固定用各自的語言寫，不翻譯 -->
+      <div class="modepick" role="group" aria-label="語言" data-i18n-aria="langAria">
+        <button class="modebtn" id="langZh" lang="zh-Hant" aria-label="繁體中文" title="繁體中文">中</button>
+        <button class="modebtn" id="langEn" lang="en" aria-label="English" title="English">EN</button>
+      </div>
     </div>
 
 
@@ -2818,7 +2826,8 @@ function applyI18n(){
   };
   put('data-i18n',      (el, v) => { el.textContent = v; });
   put('data-i18n-ph',   (el, v) => { el.placeholder = v; });
-  put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); });
+  // 有滑鼠提示的（例如首頁的圖示開關）也一起換
+  put('data-i18n-aria', (el, v) => { el.setAttribute('aria-label', v); if (el.title) el.title = v; });
 }
 
 let deniedTurn = 0;
@@ -3882,7 +3891,7 @@ function loadSong(idx, setPos){
          accents:s.accents, sub:s.sub, ramp:s.ramp, mute:s.mute,
          // 預備拍是後來才加的；舊曲目沒有的話不送，房間維持現在的設定
          ...(s.count ? { count:s.count } : {}),
-         now: { title:s.name, ...(setPos || {}) } });
+         playing: { title:s.name, ...(setPos || {}) } });
   // 把這首的速度和長度填回「耗時」的原曲欄位。沒存長度的就清空長度，免得留著上一首的數字
   //（origBpm 是短暫存在過的舊欄位，那一版把原曲速度跟曲目速度分開存）
   fillCalc(s.origBpm || s.bpm, s.len || 0);
@@ -4672,11 +4681,11 @@ function onState(m){
   showRoom();
 
   $('roomCode').firstChild.textContent = m.code;
+  // 現在是哪一首（有人套用曲目或用歌單切歌時才有）；m.now 是伺服器時間，不要搞混
+  const playing = m.playing;
+  $('nowSong').hidden = !playing;
+  if (playing) $('nowSong').textContent = playing.set ? UI.nowSongInSet(playing.title, playing.set, playing.pos, playing.total) : UI.nowSong(playing.title);
   // 人數用「人形圖示＋數字」，頂部列才放得下返回鍵（英文的 12 people 太長）；完整說法給讀屏和滑鼠提示
-  // 現在是哪一首（有人套用曲目或用歌單切歌時才有）
-  const now = m.now;
-  $('nowSong').hidden = !now;
-  if (now) $('nowSong').textContent = now.set ? UI.nowSongInSet(now.title, now.set, now.pos, now.total) : UI.nowSong(now.title);
   $('peopleNum').textContent = m.people;
   $('people').setAttribute('aria-label', UI.people(m.people));
   $('people').title = UI.people(m.people);
