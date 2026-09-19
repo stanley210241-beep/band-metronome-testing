@@ -394,7 +394,7 @@ const escHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&l
 const INDEXABLE = SITE === 'lite';
 
 const SEO = {
-  zh: { title: '同步節拍器｜全團耳機同步的線上節拍器',
+  zh: { title: '同步節拍器｜全團同步的線上節拍器',
         desc: '免費的線上節拍器，專為樂團團練設計：同一個房間的人，耳機裡聽到同一拍。開房間、傳連結或掃 QR code 就能一起對拍，藍牙耳機的延遲也能自己微調。手機打開網頁就能用，免下載、免註冊。' },
   en: { title: 'Sync Metronome — Online Metronome for Bands',
         desc: 'A free online metronome for band rehearsals: everyone in the room hears the same click in their headphones. Share a link or QR code to play in time together, and fine-tune Bluetooth headphone delay. Works in your phone’s browser — no app, no sign-up.' },
