@@ -1858,6 +1858,39 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
 body.in-room .tabbar{animation:tabbarUp .32s cubic-bezier(.2,.8,.2,1)}
 body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 @media (prefers-reduced-motion:reduce){ .screen.in-fwd,.screen.in-back,.screen.out-fwd,.screen.out-back,body.in-room .tabbar{animation:none} }
+/* ---------- 「我的」頁 ---------- */
+.me{display:flex;flex-direction:column;gap:.9rem;margin-top:.2rem}
+.me-card{display:flex;flex-direction:column;gap:.55rem;padding:1rem;border-radius:18px;
+  background:var(--card-soft);border:1px solid var(--line);color:var(--navy) !important}
+.me-acct{flex-direction:row;flex-wrap:wrap;align-items:center;gap:.75rem}
+.me-avatar{width:3rem;height:3rem;flex:0 0 auto;border-radius:50%;overflow:hidden;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--brass) 16%,transparent);color:var(--brass);font-weight:800;font-size:1.25rem}
+.me-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.me-avatar svg{width:1.6rem;height:1.6rem;fill:currentColor}
+.me-avatar [hidden]{display:none !important}
+.me-who{flex:1;min-width:0;display:flex;flex-direction:column;gap:.15rem}
+.me-who b{font-size:1rem;color:var(--navy) !important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-who small{font-size:.76rem;line-height:1.5;color:var(--mute) !important;overflow-wrap:anywhere}
+.me-acct .btn-link{margin:0;padding:.3rem .2rem;font-size:.85rem}
+.me-signin{width:100%;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;height:2.9rem;border-radius:14px;
+  border:1px solid var(--line) !important;background:var(--card) !important;color:var(--navy) !important;font-weight:650;font-size:.92rem}
+.me-signin svg{width:1.15rem;height:1.15rem}
+.me-cloud{width:100%;margin:0}
+.me-plan small{font-size:.72rem;letter-spacing:.08em;color:var(--mute) !important}
+.me-plan b{font-size:1.3rem;color:var(--navy) !important;margin-top:-.2rem}
+.me-perks-title{margin:.2rem 0 0;font-size:.84rem;font-weight:650;color:var(--navy) !important}
+.me-perks{margin:0;padding-left:1.2rem;color:var(--mute) !important;font-size:.84rem;line-height:1.7}
+.me-soon{margin:0;text-align:center}
+/* 用 #meBody 開頭：房間裡的 .hint 被舊樣式用 #room 指定成白字，權重要比它高 */
+#meBody .me-soon.lit{color:var(--brass) !important;font-weight:650;animation:noteIn .25s ease-out}
+@keyframes noteIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+#meBody .me-notice{width:100%;margin:0;color:var(--alert) !important}
+/* 「我的」頁裡的元件自己有 display，要讓 hidden 屬性一定蓋得過去 */
+.me [hidden]{display:none !important}
+.me-sec{display:flex;flex-direction:column;gap:.6rem}
+.me-h{margin:.4rem 0 0;font-size:.98rem;font-weight:700;color:var(--navy) !important}
+.me .fb-title{display:none}
+.me-sheet{max-height:86vh;overflow:auto;padding-top:3.2rem}
 </style>
 </head>
 <body>
@@ -1878,16 +1911,10 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
         <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
         <span data-i18n="signInShort">登入</span>
       </button>
-      <!-- 登入後只顯示大頭照，點一下展開帳號選單 -->
-      <button id="acctBtn" class="acct-chip acct-me" aria-haspopup="true" aria-expanded="false" hidden>
+      <!-- 登入後只顯示大頭照，點一下打開「我的」（帳號、方案、登出） -->
+      <button id="acctBtn" class="acct-chip acct-me" aria-haspopup="dialog" hidden>
         <img id="acctPhoto" alt="" referrerpolicy="no-referrer"><span id="acctInitial" aria-hidden="true"></span>
       </button>
-      <div id="acctMenu" class="acct-menu" hidden>
-        <b id="acctName"></b>
-        <small id="acctMail"></small>
-        <p class="acct-cloud" id="acctCloud"></p>
-        <button id="signOutBtn" class="btn-link" data-i18n="signOut">登出</button>
-      </div>
     </div>
     </div>
     <!-- 名稱用 bdi 包：.mark span 在好幾層樣式裡都被指定成小字副標，不能用 span -->
@@ -2208,36 +2235,79 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
       </div>
     </div>
 
-    <!-- 意見回饋頁（經過我們的伺服器轉送到 Google 試算表，再寄信給開發者） -->
-    <div class="pane" id="paneFeedback" data-tab="feedback">
-      <form class="fb" id="fbForm" novalidate>
-        <h2 class="fb-title" id="fbTitle" data-i18n="fbTitle">意見回饋</h2>
-        <textarea id="fbMsg" maxlength="2000" rows="7" required placeholder="想要什麼功能、哪裡不好用，都可以告訴我們" data-i18n-ph="fbMsgPh" aria-label="意見" data-i18n-aria="fbMsgAria"></textarea>
-        <input id="fbMail" type="email" inputmode="email" maxlength="100" autocomplete="email" placeholder="你的信箱（選填，想收到回覆再填）" data-i18n-ph="fbMailPh" aria-label="信箱（選填）" data-i18n-aria="fbMailAria">
-        <button id="fbSend" class="btn btn-solid" type="submit" data-i18n="fbSend">送出</button>
-        <p class="fb-status" id="fbStatus" role="status" aria-live="polite"></p>
-      </form>
-    </div>
+    <!-- 「我的」頁：帳號、方案／升級、意見回饋、如何使用。
+         首頁右上角的大頭照點下去，會把這一頁的內容（#meBody）搬到彈出視窗裡顯示，同一份不用寫兩次 -->
+    <div class="pane" id="paneMe" data-tab="me">
+      <div class="me" id="meBody">
+        <!-- 帳號：登入是用來記住「這個人買了什麼方案」，也讓曲目、歌單、簽到存在雲端 -->
+        <section class="me-card me-acct">
+          <div class="me-avatar" aria-hidden="true">
+            <img id="mePhoto" alt="" referrerpolicy="no-referrer" hidden>
+            <span id="meInitial" hidden></span>
+            <svg id="meGuestIcon" viewBox="0 0 16 16"><circle cx="8" cy="5.2" r="2.6"/><path d="M3 13.6c.5-2.9 2.6-4.3 5-4.3s4.5 1.4 5 4.3z"/></svg>
+          </div>
+          <div class="me-who">
+            <b id="meName" data-i18n="meGuest">還沒登入</b>
+            <small id="meMail" data-i18n="meGuestHint">登入後，曲目、歌單和之後的簽到紀錄會存在雲端，換手機也不會不見。</small>
+          </div>
+          <button class="btn-link" id="signOutBtn" data-i18n="signOut" hidden>登出</button>
+          <!-- Firebase 載入成功才會出現（onAuthStateChanged 之後） -->
+          <button class="me-signin" id="meSignIn" hidden>
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+            <span data-i18n="signInGoogle">用 Google 登入</span>
+          </button>
+          <p class="hint me-cloud" id="meCloud" hidden></p>
+          <p class="hint me-notice" id="meNotice" role="status" aria-live="polite" hidden></p>
+        </section>
 
-    <!-- 如何使用頁（之後會換成影片） -->
-    <div class="pane" id="paneHowto" data-tab="howto">
-      <div class="howto">
-        <h2 class="fb-title" data-i18n="howTitle">如何使用</h2>
-        <ol class="how-steps">
-          <li data-i18n="howStep1">按「開一個新房間」</li>
-          <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
-          <li data-i18n="howStep3">等大家都進房間後，按開始</li>
-          <li data-i18n="howStep4">對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）</li>
-          <li data-i18n="howStep5">享受你們的團練 🥁</li>
-        </ol>
-        <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
-        <ul class="how-tips">
-          <li data-i18n="howTip1">有線耳機最準；藍牙耳機大約要調 120–250。</li>
-          <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
-          <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
-          <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
-          <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
-        </ul>
+        <!-- 方案：付款還沒接，升級按鈕先顯示「即將推出」 -->
+        <section class="me-card me-plan">
+          <small data-i18n="mePlanLabel">目前方案</small>
+          <b id="mePlan" data-i18n="planFree">免費方案</b>
+          <p class="me-perks-title" data-i18n="perksTitle">升級後可以用：</p>
+          <ul class="me-perks">
+            <li data-i18n="perk1">漸快訓練、靜音訓練、循環預備拍</li>
+            <li data-i18n="perk2">不限數量的雲端曲目、表演歌單一鍵下一首</li>
+            <li data-i18n="perk3">團體方案：房主付費，全團一起用</li>
+          </ul>
+          <button class="btn btn-solid" id="upgradeBtn" data-i18n="upgrade">升級</button>
+          <p class="hint me-soon" id="upgradeNote" data-i18n="upgradeSoon" aria-live="polite">付費方案即將推出</p>
+        </section>
+
+        <!-- 意見回饋（經過我們的伺服器轉送到 Google 試算表，再寄信給開發者）。
+             首頁的「意見回饋」按鈕會把這份表單搬到彈出視窗，關掉再搬回 #fbHome -->
+        <section class="me-sec">
+          <h3 class="me-h" data-i18n="tabFeedback">意見回饋</h3>
+          <div id="fbHome">
+            <form class="fb" id="fbForm" novalidate>
+              <h2 class="fb-title" id="fbTitle" data-i18n="fbTitle">意見回饋</h2>
+              <textarea id="fbMsg" maxlength="2000" rows="6" required placeholder="想要什麼功能、哪裡不好用，都可以告訴我們" data-i18n-ph="fbMsgPh" aria-label="意見" data-i18n-aria="fbMsgAria"></textarea>
+              <input id="fbMail" type="email" inputmode="email" maxlength="100" autocomplete="email" placeholder="你的信箱（選填，想收到回覆再填）" data-i18n-ph="fbMailPh" aria-label="信箱（選填）" data-i18n-aria="fbMailAria">
+              <button id="fbSend" class="btn btn-solid" type="submit" data-i18n="fbSend">送出</button>
+              <p class="fb-status" id="fbStatus" role="status" aria-live="polite"></p>
+            </form>
+          </div>
+        </section>
+
+        <!-- 如何使用（之後會換成影片） -->
+        <section class="me-sec howto">
+          <h3 class="me-h" data-i18n="howTitle">如何使用</h3>
+          <ol class="how-steps">
+            <li data-i18n="howStep1">按「開一個新房間」</li>
+            <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
+            <li data-i18n="howStep3">等大家都進房間後，按開始</li>
+            <li data-i18n="howStep4">對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）</li>
+            <li data-i18n="howStep5">享受你們的團練 🥁</li>
+          </ol>
+          <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
+          <ul class="how-tips">
+            <li data-i18n="howTip1">有線耳機最準；藍牙耳機大約要調 120–250。</li>
+            <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
+            <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
+            <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
+            <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
+          </ul>
+        </section>
       </div>
     </div>
   </section>
@@ -2256,15 +2326,18 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg>
       <span data-i18n="tabPractice">簽到</span>
     </button>
-    <button class="tab" id="tabFeedback" data-tab="feedback">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17.5h-1A1.5 1.5 0 0 1 3 16V7a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8 10h8M8 13.5h5"/></svg>
-      <span data-i18n="tabFeedback">意見回饋</span>
-    </button>
-    <button class="tab" id="tabHowto" data-tab="howto">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9v.1"/></svg>
-      <span data-i18n="tabHowto">如何使用</span>
+    <button class="tab" id="tabMe" data-tab="me">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c.8-4 3.8-6 7.5-6s6.7 2 7.5 6"/></svg>
+      <span data-i18n="tabMe">我的</span>
     </button>
   </nav>
+
+  <!-- 在首頁按大頭照會跳出「我的」：內容跟房間裡「我的」分頁是同一份，打開時搬過來、關掉再搬回去 -->
+  <div id="meSheet" class="sheet" role="dialog" aria-modal="true" aria-label="我的" data-i18n-aria="tabMe" hidden>
+    <div class="sheet-card me-sheet" id="meSheetCard">
+      <button class="sheet-close" id="meClose" aria-label="關閉" data-i18n-aria="close">×</button>
+    </div>
+  </div>
 
   <!-- 在首頁按「意見回饋」會跳出這個視窗；表單跟房間裡那頁是同一個，打開時搬過來、關掉再搬回去 -->
   <div id="fbSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="fbTitle" hidden>
@@ -2778,7 +2851,7 @@ const UI_ZH = {
   signIn:      '用 Google 登入',
   signInShort: '登入',
   signOut:     '登出',
-  acctAria:    name => '帳號：' + name + '，點一下打開選單',
+  acctAria:    name => '帳號：' + name + '，點一下打開「我的」',
   cloudShort:  '☁ 曲目會自動同步到雲端',
   cloudHint:   '登入後，曲目會存在雲端，換手機、換電腦都看得到。',
   cloudOn:     mail => '☁ 已同步（' + mail + '）',
@@ -2793,8 +2866,20 @@ const UI_ZH = {
   close:       '關閉',
   qrHint:      '用相機掃描，加入這個房間',
   qrFail:      'QR code 產生不出來，請檢查網路',
-  tabHowto:    '如何使用',
   howTitle:    '如何使用',
+  tabMe:       '我的',
+  meGuest:     '還沒登入',
+  meGuestHint: '登入後，曲目、歌單和之後的簽到紀錄會存在雲端，換手機也不會不見。',
+  signInGoogle:'用 Google 登入',
+  mePlanLabel: '目前方案',
+  planFree:    '免費方案',
+  perksTitle:  '升級後可以用：',
+  perk1:       '漸快訓練、靜音訓練、循環預備拍',
+  perk2:       '不限數量的雲端曲目、表演歌單一鍵下一首',
+  perk3:       '團體方案：房主付費，全團一起用',
+  upgrade:     '升級',
+  upgradeSoon: '付費方案即將推出',
+  upgradeSoonToast: '付費方案還在準備中，敬請期待！',
   howStep1:    '按「開一個新房間」',
   howStep2:    '按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃',
   howStep3:    '等大家都進房間後，按開始',
@@ -2999,7 +3084,7 @@ const UI_EN = {
   signIn:      'Sign in with Google',
   signInShort: 'Sign in',
   signOut:     'Sign out',
-  acctAria:    name => 'Account: ' + name + '. Tap to open the menu',
+  acctAria:    name => 'Account: ' + name + '. Tap to open Me',
   cloudShort:  '☁ Songs sync to the cloud automatically',
   cloudHint:   'Sign in to keep your songs in the cloud, on every phone and computer.',
   cloudOn:     mail => '☁ Synced (' + mail + ')',
@@ -3014,8 +3099,20 @@ const UI_EN = {
   close:       'Close',
   qrHint:      'Scan with your camera to join this room',
   qrFail:      'Couldn’t make the QR code. Check your connection',
-  tabHowto:    'How to use',
   howTitle:    'How to use',
+  tabMe:       'Me',
+  meGuest:     'Not signed in',
+  meGuestHint: 'Sign in to keep your songs, setlists and (soon) check-ins in the cloud, even if you switch phones.',
+  signInGoogle:'Sign in with Google',
+  mePlanLabel: 'Your plan',
+  planFree:    'Free',
+  perksTitle:  'Upgrade to unlock:',
+  perk1:       'Speed trainer, gap trainer, looping count-in',
+  perk2:       'Unlimited cloud songs and one-tap “next song” setlists',
+  perk3:       'Group plans: the host pays, the whole band gets it',
+  upgrade:     'Upgrade',
+  upgradeSoon: 'Paid plans are coming soon',
+  upgradeSoonToast: 'Paid plans are on the way — stay tuned!',
   howStep1:    'Tap “Create a new room”',
   howStep2:    'Tap “Invite” and drop the link in your group chat, or just show everyone the QR code',
   howStep3:    'Once everyone’s in the room, tap Start',
@@ -4660,18 +4757,28 @@ function renderAccount(){
   $('signInBtn').hidden = !!user;
   $('signInBtn').title = UI.cloudHint;
   $('acctBtn').hidden = !user;
-  if (!user) showAcctMenu(false);
+  const name = user ? (user.displayName || user.email || '') : '';
+  const initial = name.trim().charAt(0).toUpperCase() || '?';
   if (user){
-    $('acctName').textContent = user.displayName || '';
-    $('acctMail').textContent = user.email || '';
-    $('acctBtn').setAttribute('aria-label', UI.acctAria(user.displayName || user.email || ''));
+    $('acctBtn').setAttribute('aria-label', UI.acctAria(name));
     // 有大頭照就用；沒有的話顯示名字的第一個字
-    const photo = $('acctPhoto'), initial = $('acctInitial');
+    const photo = $('acctPhoto');
     photo.hidden = !user.photoURL;
     if (user.photoURL) photo.src = user.photoURL;
-    initial.hidden = !!user.photoURL;
-    initial.textContent = (user.displayName || user.email || '?').trim().charAt(0).toUpperCase();
+    $('acctInitial').hidden = !!user.photoURL;
+    $('acctInitial').textContent = initial;
   }
+  // 「我的」頁：沒登入顯示人形圖示和登入按鈕；登入後顯示大頭照、名字、信箱、登出
+  $('meName').textContent = user ? name : UI.meGuest;
+  $('meMail').textContent = user ? (user.email || '') : UI.meGuestHint;
+  $('meSignIn').hidden = !!user;
+  $('signOutBtn').hidden = !user;
+  const photo = $('mePhoto');
+  photo.hidden = !(user && user.photoURL);
+  if (user && user.photoURL) photo.src = user.photoURL;
+  $('meInitial').hidden = !user || !!user.photoURL;
+  $('meInitial').textContent = initial;
+  $('meGuestIcon').style.display = user ? 'none' : '';
   renderCloudState();
 }
 
@@ -4683,25 +4790,15 @@ function renderCloudState(){
     : UI.cloudOn(user.email || '');
   el.classList.toggle('err', cloudState === 'error');
   el.textContent = text;
-  // 首頁帳號選單裡也顯示一份（不重複寫信箱）
-  const menu = $('acctCloud');
-  menu.classList.toggle('err', cloudState === 'error');
-  menu.textContent = !user ? '' : cloudState === 'loading' ? UI.cloudLoading
+  // 「我的」頁也顯示一份（不重複寫信箱）
+  const me = $('meCloud');
+  me.hidden = !user;
+  me.classList.toggle('err', cloudState === 'error');
+  me.textContent = !user ? '' : cloudState === 'loading' ? UI.cloudLoading
     : cloudState === 'error' ? UI.cloudErr : UI.cloudShort;
 }
 
-// 帳號選單：點大頭照打開，點其他地方或按 Esc 關掉
-function showAcctMenu(open){
-  $('acctMenu').hidden = !open;
-  $('acctBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-$('acctBtn').onclick = e => { e.stopPropagation(); showAcctMenu($('acctMenu').hidden); };
-document.addEventListener('click', e => {
-  if (!$('acctMenu').hidden && !$('acctMenu').contains(e.target)) showAcctMenu(false);
-});
-document.addEventListener('keydown', e => { if (e.key === 'Escape') showAcctMenu(false); });
-
-$('signInBtn').onclick = () => {
+function signIn(){
   if (!fbAuth) return;
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
@@ -4710,15 +4807,27 @@ $('signInBtn').onclick = () => {
     if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return;
     // 彈出視窗被擋掉的話改用整頁轉址登入
     if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment'){
-      fbAuth.signInWithRedirect(provider).catch(() => showError(LINES.signInFail, true));
+      fbAuth.signInWithRedirect(provider).catch(signInFailed);
       return;
     }
-    showError(LINES.signInFail, true);
+    signInFailed();
   });
-};
+}
+
+// 登入失敗要說在看得到的地方：在首頁就顯示在房號下面，在「我的」就顯示在帳號卡片裡
+// （toast 只出現在節拍器頁下方，從首頁或「我的」登入時看不到）
+function signInFailed(){
+  if ($('gate').classList.contains('on') && $('meSheet').hidden){ showError(LINES.signInFail, true); return; }
+  const n = $('meNotice');
+  n.textContent = LINES.signInFail;
+  n.hidden = false;
+  clearTimeout(n.timer);
+  n.timer = setTimeout(() => { n.hidden = true; }, 4000);
+}
+$('signInBtn').onclick = signIn;
+$('meSignIn').onclick = signIn;
 
 $('signOutBtn').onclick = () => {
-  showAcctMenu(false);
   stopCloudSync();
   if (fbAuth) fbAuth.signOut();
 };
@@ -5085,6 +5194,7 @@ $('lockBtn').onclick = () => {
 function showRoom(){
   if (screenTarget === 'room') return;
   screenTarget = 'room';
+  if (!$('meSheet').hidden) closeMe();     // 點邀請連結直接進房時，「我的」視窗可能還開著
   showTab('metro');
   swapScreen('room', 'fwd');
 }
@@ -5116,7 +5226,7 @@ document.addEventListener('animationend', e => {
 
 /* ---------- 分頁（底部分頁列） ---------- */
 // 三頁都在同一個網頁裡，只是換顯示哪一塊，所以換頁不會斷拍、也不會離開房間
-const TABS = ['metro', 'lib', 'practice', 'feedback', 'howto'];
+const TABS = ['metro', 'lib', 'practice', 'me'];
 let curTab = 'metro';
 
 function showTab(name){
@@ -5674,7 +5784,31 @@ $('gateFb').onclick = () => {
 };
 $('fbClose').onclick = () => {
   closeSheet('fbSheet');
-  setTimeout(() => $('paneFeedback').appendChild($('fbForm')), 190);
+  setTimeout(() => $('fbHome').appendChild($('fbForm')), 190);
+};
+
+/* ---------- 「我的」彈出視窗 ----------
+   在首頁按大頭照：把「我的」頁的內容搬進彈出視窗，關掉再搬回房間裡的「我的」分頁 */
+function openMe(){
+  $('meSheetCard').appendChild($('meBody'));
+  openSheet('meSheet');
+}
+function closeMe(){
+  closeSheet('meSheet');
+  setTimeout(() => $('paneMe').appendChild($('meBody')), 190);
+}
+$('acctBtn').onclick = openMe;
+$('meClose').onclick = closeMe;
+$('meSheet').addEventListener('click', e => { if (e.target.id === 'meSheet') closeMe(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('meSheet').hidden) closeMe(); });
+// 付款還沒接上：按下去時，按鈕下面那行字換成「敬請期待」並閃一下，過一會兒再換回來
+let upgradeTimer = 0;
+$('upgradeBtn').onclick = () => {
+  const n = $('upgradeNote');
+  n.textContent = UI.upgradeSoonToast;
+  n.classList.remove('lit'); void n.offsetWidth; n.classList.add('lit');
+  clearTimeout(upgradeTimer);
+  upgradeTimer = setTimeout(() => { n.textContent = UI.upgradeSoon; n.classList.remove('lit'); }, 2600);
 };
 
 
