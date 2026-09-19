@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#F9FAFB">
 <title>同步節拍器</title>
+<!-- 伺服器會在這裡換上 LINE 等分享預覽卡片用的 og: 標籤 -->
+<!--OG-->
 <link rel="manifest" href="/manifest.json">
 <!-- 換圖示時把 v= 的數字加一：手機會快取圖示，網址不變就一直拿舊的（server.js 的 manifest 也要一起改） -->
 <link rel="apple-touch-icon" href="/icon.png?v=2">
@@ -1757,6 +1759,81 @@ html[data-mode="light"] #room #play.on{ color:#FFFFFF !important }
 html[data-mode="light"] #room .cell.hush{ color:#111A2D !important }
 html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
 
+/* 意見回饋 */
+.fb{display:flex;flex-direction:column;gap:.75rem;margin:.2rem 0 0}
+/* --card-soft／--navy 在深色、淺色模式會自己對調，一套規則兩邊都對（--ink-2 在某些配色是白的，不能用） */
+.fb-title{margin:0 0 .1rem;font-size:1.05rem;font-weight:700;color:var(--navy) !important}
+.fb textarea,.fb input{display:block;width:100%;box-sizing:border-box;
+  padding:.8rem .9rem;border-radius:14px;border:1px solid var(--line);
+  background:var(--card-soft) !important;color:var(--navy) !important;font-size:.95rem;line-height:1.55}
+.fb textarea{resize:vertical;min-height:9rem}
+.fb textarea::placeholder,.fb input::placeholder{color:var(--mute) !important;opacity:.85}
+.fb textarea:focus,.fb input:focus{outline:none;border-color:var(--brass);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--brass) 18%,transparent)}
+.fb-status{margin:0;min-height:1.3em;font-size:.85rem;text-align:center;color:var(--mute) !important}
+.fb-status.ok{color:var(--brass) !important;font-weight:600}
+.fb-status.err{color:var(--alert) !important}
+.fb button:disabled{opacity:.6}
+
+/* 首頁右上角：意見回饋（只有圖示）＋ Google 帳號，排成一列 */
+.gate-right{position:absolute;top:1rem;right:1rem;z-index:2;display:flex;gap:.4rem;align-items:flex-start}
+.gate-right .account{position:relative;top:auto;right:auto}
+.gate-fb{position:absolute;top:1rem;right:1rem;z-index:2;display:inline-flex;align-items:center;gap:.35rem;
+  height:2.3rem;padding:0 .8rem;border-radius:999px;border:1px solid var(--line) !important;
+  background:color-mix(in srgb,var(--card-soft) 80%,transparent) !important;color:var(--mute) !important;
+  font-size:.78rem;font-weight:600}
+.gate-fb svg{width:1rem;height:1rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* 窄手機上只留圖示，免得跟左邊兩顆開關擠在一起 */
+@media (max-width:360px){ .gate-fb span{display:none} .gate-fb{padding:0;width:2.3rem;justify-content:center} }
+
+.gate-right .gate-fb{position:static;padding:0;width:2.3rem;justify-content:center}
+.gate-right .gate-fb span{display:none}
+
+/* ---------- 房間最下面：邀請團員、QR code ---------- */
+.invite-row{display:flex;gap:.6rem;width:100%}
+.invite-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:.45rem;
+  height:2.9rem;border-radius:14px;border:1px solid var(--line) !important;
+  background:color-mix(in srgb,var(--brass) 10%,transparent) !important;color:var(--brass) !important;
+  font-size:.88rem;font-weight:650}
+.invite-btn svg{width:1.15rem;height:1.15rem;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
+
+/* ---------- 彈出視窗（首頁的意見回饋、QR code） ---------- */
+.sheet{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;
+  padding:16px;background:rgba(0,0,0,.5);opacity:0;transition:opacity .18s ease}
+.sheet.show{opacity:1}
+.sheet[hidden]{display:none}
+.sheet-card{position:relative;width:100%;max-width:24rem;padding:1.3rem 1.1rem 1.1rem;border-radius:22px;
+  background:var(--card);border:1px solid var(--line);color:var(--navy);
+  box-shadow:0 24px 60px rgba(0,0,0,.35);transform:translateY(12px) scale(.98);transition:transform .2s ease}
+.sheet.show .sheet-card{transform:none}
+.sheet-close{position:absolute;top:.7rem;right:.7rem;width:2.2rem;height:2.2rem;border-radius:50%;
+  font-size:1.3rem;line-height:1;color:var(--mute) !important;background:color-mix(in srgb,var(--mute) 12%,transparent) !important}
+@media (prefers-reduced-motion:reduce){ .sheet,.sheet-card{transition:none} }
+
+/* QR code 卡片：上面一條用目前配色的漸層，房號大字，下面是白底的 QR code（白底相機才讀得準） */
+.qr-card{display:flex;flex-direction:column;align-items:center;gap:.9rem;max-width:20rem;padding:0 0 1.2rem;overflow:hidden}
+.qr-head{align-self:stretch;display:flex;flex-direction:column;align-items:center;gap:.15rem;
+  padding:1.3rem 1rem 1.1rem;background:linear-gradient(135deg,var(--brass),var(--brass-2));color:#fff}
+.qr-head small{font-size:.66rem;letter-spacing:.28em;font-weight:700;opacity:.9}
+.qr-head b{font-size:2.3rem;letter-spacing:.3em;margin-right:-.3em;font-weight:800;line-height:1.1}
+.qr-card .sheet-close{color:#fff !important;background:rgba(255,255,255,.2) !important}
+#qrCanvas{border-radius:14px;box-shadow:0 0 0 1px var(--line);background:#fff}
+.qr-hint{margin:0;font-size:.85rem;color:var(--mute)}
+
+/* ---------- 如何使用 ---------- */
+.howto{display:flex;flex-direction:column;gap:.6rem;margin-top:.2rem}
+.how-steps{margin:0;padding:0;list-style:none;counter-reset:step;display:flex;flex-direction:column;gap:.55rem}
+.how-steps li{counter-increment:step;display:flex;gap:.75rem;align-items:flex-start;
+  padding:.8rem .9rem;border-radius:14px;background:var(--card-soft);border:1px solid var(--line);
+  color:var(--navy) !important;font-size:.92rem;line-height:1.55}
+.how-steps li::before{content:counter(step);flex:0 0 auto;width:1.6rem;height:1.6rem;border-radius:50%;
+  display:grid;place-items:center;font-size:.8rem;font-weight:800;color:#fff;background:var(--brass)}
+.how-sub{margin:.6rem 0 0;font-size:.9rem;font-weight:700;color:var(--navy) !important}
+.how-tips{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem;
+  color:var(--mute) !important;font-size:.84rem;line-height:1.6}
+.how-video{margin:.8rem 0 0;padding:.9rem;border-radius:14px;text-align:center;font-size:.85rem;
+  color:var(--mute) !important;border:1px dashed var(--line)}
 </style>
 </head>
 <body>
@@ -1767,6 +1844,11 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
   <section id="gate" class="screen on">
     <!-- Google 帳號：放在卡片右上角。登入後曲目存在雲端。
          Firebase 還沒載入（或連不上）時整區隱藏，節拍器照常能用 -->
+    <div class="gate-right">
+    <button class="gate-fb" id="gateFb">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17.5h-1A1.5 1.5 0 0 1 3 16V7a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8 10h8M8 13.5h5"/></svg>
+      <span data-i18n="tabFeedback">意見回饋</span>
+    </button>
     <div id="accountArea" class="account" hidden>
       <button id="signInBtn" class="acct-chip gbtn">
         <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
@@ -1782,6 +1864,7 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         <p class="acct-cloud" id="acctCloud"></p>
         <button id="signOutBtn" class="btn-link" data-i18n="signOut">登出</button>
       </div>
+    </div>
     </div>
     <!-- 名稱用 bdi 包：.mark span 在好幾層樣式裡都被指定成小字副標，不能用 span -->
     <h1 class="mark"><bdi data-i18n="appName">同步節拍器</bdi>
@@ -2000,7 +2083,17 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
     </details>
 
     <div class="stack" style="margin-top:.7rem">
-      <button id="shareBtn" class="btn-link" data-i18n="share">複製邀請連結</button>
+      <!-- 手機上按「邀請團員」會打開分享選單（可以直接選 LINE），電腦上是複製連結 -->
+      <div class="invite-row">
+        <button id="shareBtn" class="invite-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M7.5 8 12 3.5 16.5 8"/><path d="M5 12v7.5h14V12"/></svg>
+          <span data-i18n="share">邀請團員</span>
+        </button>
+        <button id="qrBtn" class="invite-btn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1"/><path d="M14 14h2.5v2.5H14zM18 18h2.5v2.5H18zM18 14h2.5M14 18v2.5"/></svg>
+          <span>QR code</span>
+        </button>
+      </div>
       <button id="resetAudio" class="btn-link" data-i18n="resetAudio">沒有聲音？重置音訊</button>
       <p class="hint" id="audioInfo" style="text-align:center;font-size:.72rem"></p>
     </div>
@@ -2085,6 +2178,38 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
         <p class="hint" data-i18n="soonText">一起養一隻會跟著節拍跳的寵物吧！</p>
       </div>
     </div>
+
+    <!-- 意見回饋頁（經過我們的伺服器轉送到 Google 試算表，再寄信給開發者） -->
+    <div class="pane" id="paneFeedback" data-tab="feedback">
+      <form class="fb" id="fbForm" novalidate>
+        <h2 class="fb-title" id="fbTitle" data-i18n="fbTitle">意見回饋</h2>
+        <textarea id="fbMsg" maxlength="2000" rows="7" required placeholder="想要什麼功能、哪裡不好用，都可以告訴我們" data-i18n-ph="fbMsgPh" aria-label="意見" data-i18n-aria="fbMsgAria"></textarea>
+        <input id="fbMail" type="email" inputmode="email" maxlength="100" autocomplete="email" placeholder="你的信箱（選填，想收到回覆再填）" data-i18n-ph="fbMailPh" aria-label="信箱（選填）" data-i18n-aria="fbMailAria">
+        <button id="fbSend" class="btn btn-solid" type="submit" data-i18n="fbSend">送出</button>
+        <p class="fb-status" id="fbStatus" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+
+    <!-- 如何使用頁（之後會換成影片） -->
+    <div class="pane" id="paneHowto" data-tab="howto">
+      <div class="howto">
+        <h2 class="fb-title" data-i18n="howTitle">如何使用</h2>
+        <ol class="how-steps">
+          <li data-i18n="howStep1">一個人按「開一個新房間」。</li>
+          <li data-i18n="howStep2">按「邀請團員」傳連結，或按「QR code」讓大家用相機掃。</li>
+          <li data-i18n="howStep3">每個人戴上耳機，打開「我的耳機延遲」，調到跟大家一致。</li>
+          <li data-i18n="howStep4">按「開始」，全團聽到同一拍。</li>
+        </ol>
+        <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
+        <ul class="how-tips">
+          <li data-i18n="howTip1">有線耳機最準；藍牙耳機大約要調 120–250。</li>
+          <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
+          <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
+          <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
+        </ul>
+        <p class="how-video" data-i18n="howVideo">影片教學即將推出</p>
+      </div>
+    </div>
   </section>
 
   <!-- 底部分頁列（像 LINE 那樣）：進房間後才出現。換頁時節拍器照樣在響 -->
@@ -2101,7 +2226,35 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
       <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><path d="m9 15 2 2 4-4"/></svg>
       <span data-i18n="tabPractice">簽到</span>
     </button>
+    <button class="tab" id="tabFeedback" data-tab="feedback">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17.5h-1A1.5 1.5 0 0 1 3 16V7a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8 10h8M8 13.5h5"/></svg>
+      <span data-i18n="tabFeedback">意見回饋</span>
+    </button>
+    <button class="tab" id="tabHowto" data-tab="howto">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9v.1"/></svg>
+      <span data-i18n="tabHowto">如何使用</span>
+    </button>
   </nav>
+
+  <!-- 在首頁按「意見回饋」會跳出這個視窗；表單跟房間裡那頁是同一個，打開時搬過來、關掉再搬回去 -->
+  <div id="fbSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="fbTitle" hidden>
+    <div class="sheet-card" id="fbSheetCard">
+      <button class="sheet-close" id="fbClose" aria-label="關閉" data-i18n-aria="close">×</button>
+    </div>
+  </div>
+
+  <!-- QR code：顏色跟著當下的配色 -->
+  <div id="qrSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="qrRoom" hidden>
+    <div class="sheet-card qr-card">
+      <button class="sheet-close" id="qrClose" aria-label="關閉" data-i18n-aria="close">×</button>
+      <div class="qr-head">
+        <small>SYNC METRONOME</small>
+        <b id="qrRoom">----</b>
+      </div>
+      <canvas id="qrCanvas" width="264" height="264" aria-label="QR code"></canvas>
+      <p class="qr-hint" data-i18n="qrHint">用相機掃描，加入這個房間</p>
+    </div>
+  </div>
 
 </div>
 
@@ -2227,6 +2380,8 @@ html[data-mode="dark"] #room .cell.hush{ color:#F8FAFC !important }
     lang = langs.some(l => /^zh/i.test(l)) ? 'zh' : 'en';
   }
   window.MM_LANG = lang;
+  // 分享卡片和 QR code 要用同一組顏色（伺服器那邊照這個編號畫卡片）
+  window.MM_PALETTE = { idx, primary: p.primary, soft: p.primarySoft, deep: p.navy };
   root.lang = lang === 'en' ? 'en' : 'zh-Hant';
   document.title = (lang === 'en' ? 'Sync Metronome' : '同步節拍器') + ' · ' + p.name;
   const theme = document.querySelector('meta[name="theme-color"]');
@@ -2488,6 +2643,21 @@ const UI_ZH = {
   no:          '否',
   cancel:      '取消',
 
+  // 意見回饋
+  tabFeedback: '意見回饋',
+  fbTitle:     '意見回饋',
+  fbMsgPh:     '想要什麼功能、哪裡不好用，都可以告訴我們',
+  fbMsgAria:   '意見',
+  fbMailPh:    '你的信箱（選填，想收到回覆再填）',
+  fbMailAria:  '信箱（選填）',
+  fbSend:      '送出',
+  fbSending:   '送出中…',
+  fbThanks:    '收到了，謝謝你！',
+  fbEmpty:     '先寫點什麼再送出喔',
+  fbBadMail:   '信箱格式好像不對',
+  fbTooFast:   '送太快了，休息一下再試',
+  fbFail:      '沒送出去，等一下再試一次',
+
   // 預備拍
   countTitle:     '預備拍',
   countOnText:    '開始前先數預備拍',
@@ -2582,8 +2752,25 @@ const UI_ZH = {
   cloudErr:    '雲端同步暫時失敗，之後會再試',
   cloudLoading:'正在讀取雲端的曲目…',
 
-  share:       '複製邀請連結',
-  shareDone:   '已複製',
+  share:       '邀請團員',
+  shareDone:   '已複製連結',
+  shareTitle:  code => '一起加入房間 ' + code,
+  shareText:   '點開就能加入，全團耳機裡聽到同一拍。',
+  close:       '關閉',
+  qrHint:      '用相機掃描，加入這個房間',
+  qrFail:      'QR code 產生不出來，請檢查網路',
+  tabHowto:    '如何使用',
+  howTitle:    '如何使用',
+  howStep1:    '一個人按「開一個新房間」。',
+  howStep2:    '按「邀請團員」傳連結，或按「QR code」讓大家用相機掃。',
+  howStep3:    '每個人戴上耳機，打開「我的耳機延遲」，調到跟大家一致。',
+  howStep4:    '按「開始」，全團聽到同一拍。',
+  howTipsTitle:'小提醒',
+  howTip1:     '有線耳機最準；藍牙耳機大約要調 120–250。',
+  howTip2:     'iPhone 的靜音開關要關掉，不然可能沒有聲音。',
+  howTip3:     '沒有聲音時，按節拍器頁最下面的「重置音訊」。',
+  howTip4:     '房主可以把房間上鎖，鎖上後只有房主能改設定。',
+  howVideo:    '影片教學即將推出',
   resetAudio:  '沒有聲音？重置音訊',
   leave:       '離開房間',
   audioInfo:   (state, n) => '音訊：' + state + (n ? ' 已重建 ' + n + ' 次' : ''),
@@ -2683,6 +2870,20 @@ const UI_EN = {
   no:          'No',
   cancel:      'Cancel',
 
+  tabFeedback: 'Feedback',
+  fbTitle:     'Feedback',
+  fbMsgPh:     'Features you want, things that bug you — tell us anything',
+  fbMsgAria:   'Your feedback',
+  fbMailPh:    'Your email (optional, if you want a reply)',
+  fbMailAria:  'Email (optional)',
+  fbSend:      'Send',
+  fbSending:   'Sending…',
+  fbThanks:    'Got it — thank you!',
+  fbEmpty:     'Write something first',
+  fbBadMail:   'That email doesn’t look right',
+  fbTooFast:   'Too many at once. Try again in a bit',
+  fbFail:      'Couldn’t send. Please try again later',
+
   countTitle:     'Count-in',
   countOnText:    'Count in before starting',
   countBarsBefore:'Count',
@@ -2770,8 +2971,25 @@ const UI_EN = {
   cloudErr:    'Cloud sync failed. Will retry',
   cloudLoading:'Loading your songs from the cloud…',
 
-  share:       'Copy invite link',
-  shareDone:   'Copied',
+  share:       'Invite',
+  shareDone:   'Link copied',
+  shareTitle:  code => 'Join room ' + code,
+  shareText:   'Tap to join — everyone hears the same beat in their headphones.',
+  close:       'Close',
+  qrHint:      'Scan with your camera to join this room',
+  qrFail:      'Couldn’t make the QR code. Check your connection',
+  tabHowto:    'How to use',
+  howTitle:    'How to use',
+  howStep1:    'One person taps “Create a new room”.',
+  howStep2:    'Tap “Invite” to send the link, or “QR code” so everyone can scan it.',
+  howStep3:    'Everyone puts on headphones and adjusts “My headphone delay” until they line up.',
+  howStep4:    'Tap “Start” — the whole band hears the same beat.',
+  howTipsTitle:'Tips',
+  howTip1:     'Wired headphones are the most accurate; Bluetooth usually needs about 120–250.',
+  howTip2:     'On iPhone, turn off the silent switch or you may hear nothing.',
+  howTip3:     'No sound? Tap “Reset audio” at the bottom of the Metronome tab.',
+  howTip4:     'The host can lock the room so only they can change settings.',
+  howVideo:    'Video tutorial coming soon',
   resetAudio:  'No sound? Reset audio',
   leave:       'Leave room',
   audioInfo:   (state, n) => 'Audio: ' + state + (n ? ' · rebuilt ' + n + (n === 1 ? ' time' : ' times') : ''),
@@ -4836,7 +5054,7 @@ function showRoom(){
 
 /* ---------- 分頁（底部分頁列） ---------- */
 // 三頁都在同一個網頁裡，只是換顯示哪一塊，所以換頁不會斷拍、也不會離開房間
-const TABS = ['metro', 'lib', 'practice'];
+const TABS = ['metro', 'lib', 'practice', 'feedback', 'howto'];
 let curTab = 'metro';
 
 function showTab(name){
@@ -4914,6 +5132,55 @@ document.addEventListener('animationend', e => {
 });
 // 換分頁時手機輕震一下（Android 才有；iPhone 的網頁不支援震動）
 $('tabBar').addEventListener('click', () => { try { navigator.vibrate && navigator.vibrate(8); } catch(e){} });
+
+function showError(msg, hot){
+  const el = $('gateErr');
+  el.textContent = msg;
+  el.classList.toggle('hot', !!hot);
+  setTimeout(() => { el.textContent = ''; el.classList.remove('hot'); }, 4000);
+}
+
+/* ---------- 意見回饋 ----------
+   送到自己的伺服器（/feedback），伺服器再轉給 Google 試算表、寄信給開發者。
+   Google 的網址只存在伺服器的環境變數裡，不會出現在網頁原始碼。 */
+const FB_MAX = 2000, FB_MAIL_MAX = 100;
+const looksLikeMail = s => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+let fbBusy = false;
+
+function fbSay(text, kind){
+  const el = $('fbStatus');
+  el.textContent = text;
+  el.className = 'fb-status' + (kind ? ' ' + kind : '');
+}
+
+$('fbForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (fbBusy) return;
+  const msg = $('fbMsg').value.trim();
+  const mail = $('fbMail').value.trim();
+  if (!msg){ fbSay(UI.fbEmpty, 'err'); $('fbMsg').focus(); return; }
+  if (mail && !looksLikeMail(mail)){ fbSay(UI.fbBadMail, 'err'); $('fbMail').focus(); return; }
+  fbBusy = true;
+  $('fbSend').disabled = true;
+  fbSay(UI.fbSending);
+  try {
+    const r = await fetch(serverBase() + '/feedback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg.slice(0, FB_MAX), email: mail.slice(0, FB_MAIL_MAX), lang: LANG, room: st.code || '' }),
+    });
+    if (r.status === 429){ fbSay(UI.fbTooFast, 'err'); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    $('fbMsg').value = '';
+    fbSay(UI.fbThanks, 'ok');
+  } catch(err){
+    fbSay(UI.fbFail, 'err');
+  } finally {
+    fbBusy = false;
+    $('fbSend').disabled = false;
+  }
+});
+$('fbMsg').addEventListener('input', () => { if ($('fbStatus').classList.contains('err')) fbSay(''); });
 
 function showError(msg, hot){
   const el = $('gateErr');
@@ -5234,12 +5501,110 @@ $('latRange').addEventListener('input', e => setLatency(Number(e.target.value)))
 holdable($('latMinus'), () => setLatency(myLatency - LAT_STEP));
 holdable($('latPlus'),  () => setLatency(myLatency + LAT_STEP));
 
+/* ---------- 邀請：分享連結與 QR code ----------
+   連結帶著房號（r）和目前的配色編號（p），伺服器照這兩個畫 LINE 的預覽卡片。
+   # 後面也放房號：點開連結的人不用打字，房號已經填好。 */
+function inviteUrl(){
+  const P = window.MM_PALETTE || { idx: 1 };
+  return serverBase() + '/?r=' + st.code + '&p=' + P.idx + (LANG === 'en' ? '&l=en' : '') + '#' + st.code;
+}
+
 $('shareBtn').onclick = async () => {
-  const url = serverBase() + '/#' + st.code;
-  try { await navigator.clipboard.writeText(url); $('shareBtn').textContent = UI.shareDone; }
-  catch(e){ $('shareBtn').textContent = url; }
-  setTimeout(() => { $('shareBtn').textContent = UI.share; }, 2000);
+  const url = inviteUrl();
+  const label = $('shareBtn').lastElementChild;
+  // 手機上打開系統的分享選單（可以直接選 LINE）；電腦或不支援的話改成複製
+  if (navigator.share && matchMedia('(pointer: coarse)').matches){
+    try { await navigator.share({ title: UI.shareTitle(st.code), text: UI.shareText, url }); return; }
+    catch(e){ if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); label.textContent = UI.shareDone; }
+  catch(e){ label.textContent = url; }
+  setTimeout(() => { label.textContent = UI.share; }, 2000);
 };
+
+// QR code 的程式（開源的 qrcode-generator）只有第一次按的時候才去載，不拖慢開網頁
+let qrLib = null;
+function loadQrLib(){
+  if (window.qrcode) return Promise.resolve();
+  if (!qrLib) qrLib = new Promise((ok, fail) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
+    s.onload = ok;
+    s.onerror = () => { qrLib = null; s.remove(); fail(); };
+    document.head.appendChild(s);
+  });
+  return qrLib;
+}
+
+// 格子顏色用目前配色的主色；太淺的話一直加深，直到跟白底的對比夠相機讀（至少 4.5 倍）
+function qrInk(){
+  const P = window.MM_PALETTE || { primary: '#111A2D' };
+  let rgb = [1, 3, 5].map(i => parseInt(P.primary.slice(i, i + 2), 16));
+  const lum = c => { const v = c.map(x => x / 255).map(x => x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4));
+                     return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; };
+  for (let k = 0; k < 20 && 1.05 / (lum(rgb) + .05) < 4.5; k++) rgb = rgb.map(x => x * .85);
+  return 'rgb(' + rgb.map(Math.round).join(',') + ')';
+}
+
+function drawQr(url){
+  const q = qrcode(0, 'M');
+  q.addData(url);
+  q.make();
+  const n = q.getModuleCount(), quiet = 4, total = n + quiet * 2;
+  const cv = $('qrCanvas'), css = 232, dpr = Math.min(3, window.devicePixelRatio || 1);
+  cv.width = cv.height = Math.round(css * dpr);
+  cv.style.width = cv.style.height = css + 'px';
+  const g = cv.getContext('2d'), cell = cv.width / total;
+  g.fillStyle = '#FFFFFF';
+  g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = qrInk();
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (q.isDark(r, c)) {
+      // 取整數邊界再多畫一點點，相鄰格子之間才不會出現細白線
+      const x = Math.floor((c + quiet) * cell), y = Math.floor((r + quiet) * cell);
+      g.fillRect(x, y, Math.ceil(cell) + 1, Math.ceil(cell) + 1);
+    }
+  }
+}
+
+function openSheet(id){
+  const s = $(id);
+  s.hidden = false;
+  requestAnimationFrame(() => s.classList.add('show'));
+}
+function closeSheet(id){
+  const s = $(id);
+  s.classList.remove('show');
+  setTimeout(() => { s.hidden = true; }, 180);
+}
+for (const id of ['fbSheet', 'qrSheet']){
+  $(id).addEventListener('click', e => { if (e.target.id === id) closeSheet(id); });   // 點外面關掉
+}
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (!$('qrSheet').hidden) closeSheet('qrSheet');
+  if (!$('fbSheet').hidden) $('fbClose').click();
+});
+
+$('qrBtn').onclick = async () => {
+  try { await loadQrLib(); } catch(e){ toast(UI.qrFail); return; }
+  $('qrRoom').textContent = st.code;
+  drawQr(inviteUrl());
+  openSheet('qrSheet');
+};
+$('qrClose').onclick = () => closeSheet('qrSheet');
+
+// 首頁的「意見回饋」：把房間裡那份表單搬進彈出視窗，關掉再搬回去（同一份表單，不用寫兩次）
+$('gateFb').onclick = () => {
+  $('fbSheetCard').appendChild($('fbForm'));
+  openSheet('fbSheet');
+  setTimeout(() => $('fbMsg').focus(), 200);
+};
+$('fbClose').onclick = () => {
+  closeSheet('fbSheet');
+  setTimeout(() => $('paneFeedback').appendChild($('fbForm')), 190);
+};
+
 
 function backToGate(){
   stopBgTrack();
@@ -5376,7 +5741,8 @@ $('serverSave').onclick = () => {
 };
 $('serverInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('serverSave').click(); });
 
-const fromLink = location.hash.slice(1).toUpperCase();
+// 邀請連結的房號在 # 後面；有些 App 打開連結時會把 # 吃掉，所以 ?r= 也看
+const fromLink = (location.hash.slice(1) || new URLSearchParams(location.search).get('r') || '').toUpperCase();
 if (/^[A-Z0-9]{4}$/.test(fromLink)) $('code').value = fromLink;
 applyI18n();
 renderBeats();

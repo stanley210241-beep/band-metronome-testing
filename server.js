@@ -1,14 +1,16 @@
 // 同步節拍器 —— 伺服器
-// 職責只有三件事：
+// 職責只有這幾件事：
 //   1. 管理房間（建立／加入／人數／控制權）
 //   2. 回報伺服器目前時間，讓每支手機算出自己的時差
 //   3. 把節拍設定廣播給同房間的人
+//   4. 把意見回饋、使用統計轉給 Google 試算表；畫分享預覽卡片
 // 注意：伺服器不傳送任何聲音，也不負責漸快的計時。
 //       聲音和漸快都由每支手機依照同一組參數自己算，算式一樣就必然一致。
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
@@ -47,10 +49,384 @@ const MANIFEST = JSON.stringify({
   icons: [{ src: '/icon.png?v=2', sizes: '180x180', type: 'image/png', purpose: 'any' }],
 });
 
+/* ---------- 意見回饋 ----------
+   網頁把意見 POST 到 /feedback，這裡檢查過之後轉給 Google 試算表（Apps Script），
+   由它記一列、寄信給開發者。
+   Google 的網址放在 Render 的環境變數 FEEDBACK_URL，不寫在程式裡（GitHub 是公開的，
+   網址外流就可能被灌垃圾訊息）。FEEDBACK_SECRET 是雙方約好的暗號，Apps Script 對不上就不收。 */
+
+const FEEDBACK_URL = process.env.FEEDBACK_URL || '';
+const FEEDBACK_SECRET = process.env.FEEDBACK_SECRET || '';
+// 三個網站（精簡版、測試版、Demo 版）共用同一張試算表，每一筆都標上是哪個網站送來的
+const SITE = process.env.SITE_NAME || 'testing';
+const FB_MAX = 2000, FB_MAIL_MAX = 100;
+const FB_PER_IP = 5, FB_WINDOW_MS = 10 * 60 * 1000;   // 同一個人 10 分鐘內最多 5 則
+const FB_PER_DAY = 80;                               // 全站每天上限（Google 免費帳號一天大約能寄 100 封信）
+const fbHits = new Map();                            // IP → 最近送出的時間
+let fbDay = '', fbToday = 0;
+
+function clientIp(req) {
+  // Render 前面有一層轉址，真正的來源 IP 在 x-forwarded-for 的第一個
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || req.socket.remoteAddress || '';
+}
+
+function fbAllowed(ip) {
+  const now = Date.now();
+  const day = new Date(now).toISOString().slice(0, 10);
+  if (day !== fbDay) { fbDay = day; fbToday = 0; fbHits.clear(); }
+  if (fbToday >= FB_PER_DAY) return false;
+  const recent = (fbHits.get(ip) || []).filter(t => now - t < FB_WINDOW_MS);
+  if (recent.length >= FB_PER_IP) { fbHits.set(ip, recent); return false; }
+  recent.push(now);
+  fbHits.set(ip, recent);
+  fbToday++;
+  return true;
+}
+
+function sendJson(res, code, obj) {
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(obj));
+}
+
+function handleFeedback(req, res) {
+  // 之後包成 app 時網頁跟伺服器不同網域，所以要允許跨網域
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST',
+                         'Access-Control-Allow-Headers': 'Content-Type' });
+    res.end();
+    return;
+  }
+  if (req.method !== 'POST') return sendJson(res, 405, { ok: false });
+  if (!FEEDBACK_URL) return sendJson(res, 503, { ok: false, why: 'not set up' });
+
+  let body = '', tooBig = false;
+  req.setEncoding('utf8');
+  req.on('data', chunk => {
+    body += chunk;
+    if (body.length > 16 * 1024) { tooBig = true; req.destroy(); }
+  });
+  req.on('end', async () => {
+    if (tooBig) return;
+    let m;
+    try { m = JSON.parse(body); } catch (e) { return sendJson(res, 400, { ok: false }); }
+    const message = typeof m.message === 'string' ? m.message.trim().slice(0, FB_MAX) : '';
+    let email = typeof m.email === 'string' ? m.email.trim().slice(0, FB_MAIL_MAX) : '';
+    if (!message) return sendJson(res, 400, { ok: false });
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) email = '';
+    if (!fbAllowed(clientIp(req))) return sendJson(res, 429, { ok: false });
+
+    try {
+      const r = await fetch(FEEDBACK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secret: FEEDBACK_SECRET, site: SITE,
+          message, email,
+          lang: m.lang === 'en' ? 'en' : 'zh',
+          room: typeof m.room === 'string' ? m.room.slice(0, 8) : '',
+          ua: String(req.headers['user-agent'] || '').slice(0, 200),
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const text = await r.text();
+      if (!r.ok || !/"ok"\s*:\s*true/.test(text)) throw new Error('Apps Script: ' + r.status + ' ' + text.slice(0, 120));
+      sendJson(res, 200, { ok: true });
+    } catch (e) {
+      console.error('意見回饋轉送失敗：', e.message);
+      sendJson(res, 502, { ok: false });
+    }
+  });
+}
+
+/* ---------- 使用統計 ----------
+   只記數字，不記任何個人資料。一個房間「從有人進來到最後一個人離開」算一段，
+   結束時把這段的長度、同時最多幾人、進來幾次送去 Google 試算表的「房間紀錄」分頁，
+   每天早上由 Apps Script 彙整成一封信。
+   不在伺服器裡累計一整天：Render 免費方案沒人用 15 分鐘就會休眠，記憶體會清空。 */
+
+function sessionJoin(r) {
+  if (!r.session) r.session = { start: Date.now(), peak: 0, joins: 0, playMs: 0 };
+  r.session.joins++;
+  r.session.peak = Math.max(r.session.peak, r.clients.size);
+}
+
+function sessionPlay(r, running) {
+  if (!r.session) return;
+  if (running && !r.runFrom) r.runFrom = Date.now();
+  if (!running && r.runFrom) { r.session.playMs += Date.now() - r.runFrom; r.runFrom = 0; }
+}
+
+function sessionEnd(r) {
+  const s = r.session;
+  if (!s) return Promise.resolve();
+  sessionPlay(r, false);
+  r.session = null;
+  if (!FEEDBACK_URL) return Promise.resolve();
+  const min = ms => Math.round(ms / 6000) / 10;      // 分鐘，留一位小數
+  return fetch(FEEDBACK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      secret: FEEDBACK_SECRET, kind: 'room', site: SITE,
+      start: new Date(s.start).toISOString(),
+      minutes: min(Date.now() - s.start), playMinutes: min(s.playMs),
+      peak: s.peak, joins: s.joins,
+    }),
+    signal: AbortSignal.timeout(10000),
+  }).catch(e => console.error('使用統計送出失敗：', e.message));
+}
+
+// Render 重新部署或休眠前會先送 SIGTERM：把還開著的房間都結算送出去再關
+process.on('SIGTERM', async () => {
+  await Promise.allSettled([...rooms.values()].map(sessionEnd));
+  process.exit(0);
+});
+
+/* ---------- 分享卡片 ----------
+   在 LINE 等地方貼邀請連結時，會顯示一張預覽卡片。
+   卡片的顏色跟分享的人當下的配色一樣：網頁把「第幾組配色」放在連結的 ?p= 裡，
+   伺服器照著那組顏色，自己畫一張 1200×630 的 PNG（不用額外套件，只用 Node 內建的 zlib）。 */
+
+// 跟 index.html 的 10 組配色同順序：[主色, 淺色, 深色]。改配色時兩邊要一起改
+const CARD_PALETTES = [
+  ['#B60044', '#EC91EE', '#111A2D'], ['#4F46E5', '#8FD3FF', '#15233C'],
+  ['#00796B', '#79D9C7', '#15312D'], ['#C84A5D', '#FFB39C', '#2B1F27'],
+  ['#7A3150', '#F5D06F', '#30243A'], ['#2855C5', '#A7D8FF', '#12233F'],
+  ['#9E174D', '#A9D2B6', '#1A2C25'], ['#5B3FA8', '#C5B1F2', '#23203C'],
+  ['#B42A42', '#FFC18A', '#352127'], ['#D62C83', '#A9E7F6', '#182535'],
+];
+const CARD_W = 1200, CARD_H = 630;
+const ROOM_RE = /^[A-HJ-NP-Z2-9]{4}$/;      // 房號用的字（沒有 I O 0 1）
+
+// 5×7 點陣字，畫成圓點，看起來像節拍器上的 LED
+const DOT_FONT = {
+  A:'01110100011000111111100011000110001', B:'11110100011000111110100011000111110',
+  C:'01110100011000010000100001000101110', D:'11110100011000110001100011000111110',
+  E:'11111100001000011110100001000011111', F:'11111100001000011110100001000010000',
+  G:'01110100011000010111100011000101111', H:'10001100011000111111100011000110001',
+  I:'01110001000010000100001000010001110', J:'00111000100001000010000101001001100',
+  K:'10001100101010011000101001001010001', L:'10000100001000010000100001000011111',
+  M:'10001110111010110101100011000110001', N:'10001100011100110101100111000110001',
+  O:'01110100011000110001100011000101110', P:'11110100011000111110100001000010000',
+  Q:'01110100011000110001101011001001101', R:'11110100011000111110101001001010001',
+  S:'01111100001000001110000010000111110', T:'11111001000010000100001000010000100',
+  U:'10001100011000110001100011000101110', V:'10001100011000110001100010101000100',
+  W:'10001100011000110101101011010101010', X:'10001100010101000100010101000110001',
+  Y:'10001100010101000100001000010000100', Z:'11111000010001000100010001000011111',
+  2:'01110100010000100010001000100011111', 3:'11111000100010000010000011000101110',
+  4:'00010001100101010010111110001000010', 5:'11111100001111000001000011000101110',
+  6:'00110010001000011110100011000101110', 7:'11111000010001000100010000100001000',
+  8:'01110100011000101110100011000101110', 9:'01110100011000101111000010001001100',
+};
+
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mixRgb = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+
+// 讀內建的圖示 PNG（180×180、RGBA），畫卡片時貼上去
+function decodePng(buf) {
+  const u8 = new Uint8Array(buf.buffer ? buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) : buf);
+  const dv = new DataView(u8.buffer);
+  let pos = 8, w = 0, h = 0;
+  const parts = [];
+  while (pos < u8.length) {
+    const len = dv.getUint32(pos), type = String.fromCharCode(...u8.subarray(pos + 4, pos + 8));
+    if (type === 'IHDR') { w = dv.getUint32(pos + 8); h = dv.getUint32(pos + 12); }
+    if (type === 'IDAT') parts.push(u8.subarray(pos + 8, pos + 8 + len));
+    if (type === 'IEND') break;
+    pos += 12 + len;
+  }
+  const all = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0; for (const p of parts) { all.set(p, o); o += p.length; }
+  const raw = new Uint8Array(zlib.inflateSync(all));
+  const bpp = 4, stride = w * bpp, out = new Uint8Array(w * h * bpp);
+  for (let y = 0; y < h; y++) {
+    const f = raw[y * (stride + 1)], src = y * (stride + 1) + 1, dst = y * stride;
+    for (let x = 0; x < stride; x++) {
+      const a = x >= bpp ? out[dst + x - bpp] : 0, b = y ? out[dst + x - stride] : 0;
+      const c = x >= bpp && y ? out[dst + x - bpp - stride] : 0;
+      let v = raw[src + x];
+      if (f === 1) v += a; else if (f === 2) v += b; else if (f === 3) v += (a + b) >> 1;
+      else if (f === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+        v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      out[dst + x] = v & 255;
+    }
+  }
+  return { w, h, data: out };
+}
+
+let iconPixels = null;
+function iconImage() {
+  if (!iconPixels) { try { iconPixels = decodePng(ICON_PNG); } catch (e) { iconPixels = { w: 0 }; } }
+  return iconPixels;
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0;
+});
+function crc32(u8) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function encodePng(w, h, rgb) {
+  const raw = new Uint8Array((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) raw.set(rgb.subarray(y * w * 3, (y + 1) * w * 3), y * (w * 3 + 1) + 1);
+  const chunk = (type, data) => {
+    const out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+    dv.setUint32(0, data.length);
+    for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+    out.set(data, 8);
+    dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+    return out;
+  };
+  const ihdr = new Uint8Array(13), hv = new DataView(ihdr.buffer);
+  hv.setUint32(0, w); hv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 2;   // 8 位元 RGB
+  const parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr),
+                 chunk('IDAT', new Uint8Array(zlib.deflateSync(raw, { level: 6 }))), chunk('IEND', new Uint8Array(0))];
+  const png = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0; for (const p of parts) { png.set(p, o); o += p.length; }
+  return png;
+}
+
+function drawCard(pal, room) {
+  const [primary, soft, deep] = pal.map(hexToRgb);
+  const W = CARD_W, H = CARD_H, px = new Uint8Array(W * H * 3);
+  const put = (x, y, c, a) => {
+    if (x < 0 || y < 0 || x >= W || y >= H || a <= 0) return;
+    const i = (y * W + x) * 3;
+    if (a > 1) a = 1;
+    px[i] += (c[0] - px[i]) * a; px[i + 1] += (c[1] - px[i + 1]) * a; px[i + 2] += (c[2] - px[i + 2]) * a;
+  };
+  // 背景：左上主色漸層到右下深色，右上角一團淺色的光
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = Math.min(1, (x + y * 0.9) / (W + H * 0.9) * 1.15);
+    let c = mixRgb(primary, deep, t);
+    const d = Math.hypot(x - 1060, y - 60) / 560;
+    if (d < 1) c = mixRgb(c, soft, 0.32 * (1 - d) * (1 - d));
+    const i = (y * W + x) * 3; px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2];
+  }
+  // 圓角方塊（帶柔邊，拿來畫陰影和拍子格）
+  const roundRect = (x0, y0, w, h, r, c, a, soften = 1) => {
+    const pad = Math.ceil(soften) + 1;
+    for (let y = Math.floor(y0 - pad); y < y0 + h + pad; y++) for (let x = Math.floor(x0 - pad); x < x0 + w + pad; x++) {
+      const qx = Math.abs(x + 0.5 - (x0 + w / 2)) - (w / 2 - r), qy = Math.abs(y + 0.5 - (y0 + h / 2)) - (h / 2 - r);
+      const dist = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - r;
+      put(x, y, c, a * Math.min(1, Math.max(0, 0.5 - dist / soften)));
+    }
+  };
+  const dot = (cx, cy, r, c, a) => {
+    for (let y = Math.floor(cy - r - 1); y <= cy + r + 1; y++) for (let x = Math.floor(cx - r - 1); x <= cx + r + 1; x++) {
+      put(x, y, c, a * Math.min(1, Math.max(0, r + 0.5 - Math.hypot(x + 0.5 - cx, y + 0.5 - cy))));
+    }
+  };
+  const text = (str, x0, y0, pitch, c, a = 1) => {
+    let x = x0;
+    for (const ch of str) {
+      const g = DOT_FONT[ch];
+      if (g) for (let i = 0; i < 35; i++) if (g[i] === '1') dot(x + (i % 5 + 0.5) * pitch, y0 + (Math.floor(i / 5) + 0.5) * pitch, pitch * 0.42, c, a);
+      x += pitch * 6;
+    }
+  };
+  const white = [255, 255, 255];
+
+  // 左邊：App 圖示（先畫一層影子），四個角切成圓角，跟手機桌面上的樣子一樣
+  const icon = iconImage(), IX = 110, IY = 165, IS = 300, IR = 68;
+  roundRect(IX + 6, IY + 22, IS - 12, IS - 12, IR, [0, 0, 0], 0.35, 28);
+  if (icon.w) {
+    const k = icon.w / IS;
+    for (let y = 0; y < IS; y++) for (let x = 0; x < IS; x++) {
+      const qx = Math.abs(x + 0.5 - IS / 2) - (IS / 2 - IR), qy = Math.abs(y + 0.5 - IS / 2) - (IS / 2 - IR);
+      const edge = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - IR;
+      const mask = Math.min(1, Math.max(0, 0.5 - edge));
+      if (mask <= 0) continue;
+      const sx = Math.min(icon.w - 1.001, (x + 0.5) * k - 0.5), sy = Math.min(icon.h - 1.001, (y + 0.5) * k - 0.5);
+      const x0 = Math.max(0, Math.floor(sx)), y0 = Math.max(0, Math.floor(sy)), fx = sx - x0, fy = sy - y0;
+      const s = [0, 0, 0, 0];
+      for (const [dx, dy, wgt] of [[0, 0, (1 - fx) * (1 - fy)], [1, 0, fx * (1 - fy)], [0, 1, (1 - fx) * fy], [1, 1, fx * fy]]) {
+        const i = ((y0 + dy) * icon.w + x0 + dx) * 4, al = icon.data[i + 3] / 255 * wgt;
+        s[0] += icon.data[i] * al; s[1] += icon.data[i + 1] * al; s[2] += icon.data[i + 2] * al; s[3] += al;
+      }
+      if (s[3] > 0) put(IX + x, IY + y, [s[0] / s[3], s[1] / s[3], s[2] / s[3]], s[3] * mask);
+    }
+  }
+
+  // 右邊：名稱、四個拍子格（第一拍亮起來）、房號
+  const RX = 490;
+  const top = room ? 150 : 215;
+  text('SYNC METRONOME', RX, top, 7, soft);
+  for (let i = 0; i < 4; i++) {
+    roundRect(RX + i * 152, top + 88, 136, 76, 18, i ? white : soft, i ? 0.16 : 1);
+  }
+  if (room) {
+    text('ROOM', RX, top + 204, 6, soft, 0.9);
+    text(room, RX, top + 262, 17, white);
+  }
+  return encodePng(W, H, px);
+}
+
+const cardCache = new Map();
+function cardPng(p, room) {
+  const key = p + ':' + room;
+  if (!cardCache.has(key)) {
+    if (cardCache.size > 60) cardCache.delete(cardCache.keys().next().value);
+    cardCache.set(key, drawCard(CARD_PALETTES[p], room));
+  }
+  return cardCache.get(key);
+}
+
+// 從網址讀出配色和房號；不合理的就用預設
+function shareParams(query) {
+  const q = new URLSearchParams(query || '');
+  const p = q.has('p') ? Number(q.get('p')) : -1;
+  const room = String(q.get('r') || '').toUpperCase();
+  return { p: Number.isInteger(p) && p >= 0 && p < CARD_PALETTES.length ? p : 1,
+           room: ROOM_RE.test(room) ? room : '', en: q.get('l') === 'en' };
+}
+
+const escHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+// 預覽卡片的標題、說明、圖片網址（要完整網址，LINE 才抓得到）
+function ogTags(req, query) {
+  const { p, room, en } = shareParams(query);
+  const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0];
+  const origin = proto + '://' + req.headers.host;
+  const title = room
+    ? (en ? 'Join room ' + room + ' · Sync Metronome' : '一起加入房間 ' + room + '｜同步節拍器')
+    : (en ? 'Sync Metronome' : '同步節拍器｜全團耳機裡聽到同一拍');
+  const desc = en ? 'Tap to join. Everyone in the room hears the same beat in their headphones.'
+                  : '點開就能加入。同一個房間的人，耳機裡聽到同一拍。';
+  const img = origin + '/card.png?p=' + p + (room ? '&r=' + room : '');
+  return [
+    ['og:type', 'website'], ['og:site_name', en ? 'Sync Metronome' : '同步節拍器'],
+    ['og:title', title], ['og:description', desc], ['og:image', img],
+    ['og:image:width', CARD_W], ['og:image:height', CARD_H],
+  ].map(([k, v]) => '<meta property="' + k + '" content="' + escHtml(v) + '">')
+   .concat('<meta name="twitter:card" content="summary_large_image">',
+           '<meta name="description" content="' + escHtml(desc) + '">')
+   .join('\n');
+}
+
 /* ---------- 網頁 ---------- */
 
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
+  const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '';
+
+  if (url === '/feedback') return handleFeedback(req, res);
+  if (url === '/card.png') {
+    const { p, room } = shareParams(query);
+    try {
+      const png = cardPng(p, room);
+      res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' });
+      res.end(Buffer.from(png));
+    } catch (e) {
+      console.error('分享卡片畫不出來：', e.message);
+      res.writeHead(302, { Location: '/icon.png' });
+      res.end();
+    }
+    return;
+  }
 
   // /favicon.ico 是瀏覽器沒看到 <link rel="icon"> 時自己會去要的網址，也給同一張
   if (url === '/icon.png' || url === '/favicon.ico') {
@@ -71,7 +447,8 @@ const server = http.createServer((req, res) => {
       return;
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(data);
+    // 把預覽卡片的資訊塞進 <head>（LINE 抓的是伺服器給的原始網頁，不會跑 JavaScript）
+    res.end(data.toString('utf8').replace('<!--OG-->', ogTags(req, query)));
   });
 });
 
@@ -162,6 +539,8 @@ function createRoom() {
     startAt: 0,
     clients: new Set(),
     emptySince: 0,
+    session: null,     // 使用統計：這一段有人在的期間
+    runFrom: 0,
   });
   return code;
 }
@@ -212,6 +591,7 @@ function leaveRoom(ws) {
   if (r.clients.size === 0) {
     r.emptySince = Date.now();
     r.running = false;
+    sessionEnd(r);
   } else {
     broadcast(code);
   }
@@ -252,6 +632,7 @@ wss.on('connection', (ws) => {
       r.clients.add(ws);
       r.owner = ws;             // 開房的人就是房主
       ws.roomCode = code;
+      sessionJoin(r);
       broadcast(code);
       return;
     }
@@ -268,6 +649,7 @@ wss.on('connection', (ws) => {
       r.clients.add(ws);
       if (!r.owner) r.owner = ws;   // 房間空過一輪，第一個回來的接手
       ws.roomCode = code;
+      sessionJoin(r);
       broadcast(code);
       return;
     }
@@ -374,10 +756,12 @@ wss.on('connection', (ws) => {
       case 'start':
         r.running = true;
         r.startAt = Date.now() + LEAD_MS;
+        sessionPlay(r, true);
         break;
 
       case 'stop':
         r.running = false;
+        sessionPlay(r, false);
         break;
 
       default:
