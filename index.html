@@ -1835,7 +1835,15 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
 /* 房主的耳機延遲鎖住：滑桿和 −／＋ 變淡、不能按 */
 .latrow button:disabled,#latRange:disabled{opacity:.35;cursor:not-allowed}
 .lat-owner{color:var(--brass) !important;font-weight:600}
-</style>
+/* 頂部列右邊：音量、鎖房兩顆按鈕稍微大一點；人數和對時誤差是資訊，不加框、上下疊在最右邊 */
+#room .bar-right button.chip{display:inline-flex;align-items:center;justify-content:center;
+  height:2.05rem;min-width:2.05rem;padding:0 .8rem;font-size:.76rem}
+#room .bar-right #muteBtn{padding:0 .7rem}
+#room .bar-info{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:.1rem;
+  margin-left:.25rem;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap}
+#room .bar-info #people{font-size:.78rem;font-weight:700;color:var(--navy) !important}
+#room .bar-info #sync{font-size:.64rem;color:var(--mute) !important}
+#room .bar-info #sync.warn{color:var(--alert) !important}</style>
 </head>
 <body>
 <div class="wrap">
@@ -1922,8 +1930,11 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
       <div class="bar-right">
         <button class="chip" id="muteBtn" aria-label="靜音" data-i18n-aria="muteAria"></button>
         <button class="chip" id="lockBtn" data-i18n="open">開放</button>
-        <span class="chip" id="people" role="img" aria-label="1 人"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.2" r="2.6" fill="currentColor"/><path d="M3 13.6c.5-2.9 2.6-4.3 5-4.3s4.5 1.4 5 4.3z" fill="currentColor"/></svg><span id="peopleNum">1</span></span>
-        <span class="chip" id="sync" data-i18n="syncing">校正中</span>
+        <!-- 只顯示、不能按的資訊：人數在上、對時誤差在下，不加框，放最右邊 -->
+        <div class="bar-info">
+          <span id="people" role="img" aria-label="1 人"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5.2" r="2.6" fill="currentColor"/><path d="M3 13.6c.5-2.9 2.6-4.3 5-4.3s4.5 1.4 5 4.3z" fill="currentColor"/></svg><span id="peopleNum">1</span></span>
+          <span id="sync" data-i18n="syncing">校正中</span>
+        </div>
       </div>
     </div>
 
