@@ -57,7 +57,7 @@ const MANIFEST = JSON.stringify({
 
 const FEEDBACK_URL = process.env.FEEDBACK_URL || '';
 const FEEDBACK_SECRET = process.env.FEEDBACK_SECRET || '';
-// 三個網站（精簡版、測試版、Demo 版）共用同一張試算表，每一筆都標上是哪個網站送來的
+// 兩個網站（精簡版、測試版）共用同一張試算表，每一筆都標上是哪個網站送來的
 const SITE = process.env.SITE_NAME || 'testing';
 const FB_MAX = 2000, FB_MAIL_MAX = 100;
 const FB_PER_IP = 5, FB_WINDOW_MS = 10 * 60 * 1000;   // 同一個人 10 分鐘內最多 5 則
