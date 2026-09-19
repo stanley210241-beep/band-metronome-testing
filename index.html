@@ -1843,7 +1843,22 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
   margin-left:.25rem;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap}
 #room .bar-info #people{font-size:.78rem;font-weight:700;color:var(--navy) !important}
 #room .bar-info #sync{font-size:.64rem;color:var(--mute) !important}
-#room .bar-info #sync.warn{color:var(--alert) !important}</style>
+#room .bar-info #sync.warn{color:var(--alert) !important}
+/* 大廳和房間換畫面的動畫（程式加 in-／out- 的 class） */
+@keyframes screenInFwd{from{opacity:0;transform:translateX(32px)}to{opacity:1;transform:none}}
+@keyframes screenInBack{from{opacity:0;transform:translateX(-32px)}to{opacity:1;transform:none}}
+@keyframes screenOutFwd{to{opacity:0;transform:translateX(-32px)}}
+@keyframes screenOutBack{to{opacity:0;transform:translateX(32px)}}
+.screen.in-fwd{animation:screenInFwd .3s cubic-bezier(.2,.8,.2,1)}
+.screen.in-back{animation:screenInBack .3s cubic-bezier(.2,.8,.2,1)}
+.screen.out-fwd{animation:screenOutFwd .16s ease-in forwards}
+.screen.out-back{animation:screenOutBack .16s ease-in forwards}
+@keyframes tabbarUp{from{transform:translate(-50%,100%)}to{transform:translate(-50%,0)}}
+@keyframes tabbarDown{to{transform:translate(-50%,100%)}}
+body.in-room .tabbar{animation:tabbarUp .32s cubic-bezier(.2,.8,.2,1)}
+body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
+@media (prefers-reduced-motion:reduce){ .screen.in-fwd,.screen.in-back,.screen.out-fwd,.screen.out-back,body.in-room .tabbar{animation:none} }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -5068,12 +5083,36 @@ $('lockBtn').onclick = () => {
 };
 
 function showRoom(){
-  if ($('room').classList.contains('on')) return;
-  $('gate').classList.remove('on');
-  $('room').classList.add('on');
-  document.body.classList.add('in-room');
+  if (screenTarget === 'room') return;
+  screenTarget = 'room';
   showTab('metro');
+  swapScreen('room', 'fwd');
 }
+
+// 大廳和房間之間換畫面：舊的先淡出，新的再滑進來。
+// 進房間往左走、回大廳往右退，跟手機 App 換頁一樣；底部分頁列也跟著升起、收下去。
+let screenTarget = 'gate', screenTimer = 0;
+function swapScreen(toId, dir){
+  const to = $(toId), from = $(toId === 'room' ? 'gate' : 'room');
+  clearTimeout(screenTimer);
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const show = () => {
+    from.classList.remove('on', 'out-fwd', 'out-back');
+    to.classList.remove('in-fwd', 'in-back', 'out-fwd', 'out-back');
+    document.body.classList.remove('leaving');
+    document.body.classList.toggle('in-room', toId === 'room');
+    to.classList.add('on');
+    window.scrollTo(0, 0);
+    if (!still){ void to.offsetWidth; to.classList.add(dir === 'back' ? 'in-back' : 'in-fwd'); }
+  };
+  if (still || !from.classList.contains('on')) return show();
+  from.classList.add(dir === 'back' ? 'out-back' : 'out-fwd');
+  if (toId === 'gate') document.body.classList.add('leaving');
+  screenTimer = setTimeout(show, 160);
+}
+document.addEventListener('animationend', e => {
+  if (/^screenIn/.test(e.animationName)) e.target.classList.remove('in-fwd', 'in-back');
+});
 
 /* ---------- 分頁（底部分頁列） ---------- */
 // 三頁都在同一個網頁裡，只是換顯示哪一塊，所以換頁不會斷拍、也不會離開房間
@@ -5648,9 +5687,8 @@ function backToGate(){
   wantCode = null;
   flush();
   history.replaceState(null, '', location.pathname);
-  $('room').classList.remove('on');
-  document.body.classList.remove('in-room');
-  $('gate').classList.add('on');
+  screenTarget = 'gate';
+  swapScreen('gate', 'back');
 }
 
 $('leaveBtn').title = UI.leave;     // 滑鼠移上去時的提示
