@@ -1832,8 +1832,6 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
 .how-sub{margin:.6rem 0 0;font-size:.9rem;font-weight:700;color:var(--navy) !important}
 .how-tips{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem;
   color:var(--mute) !important;font-size:.84rem;line-height:1.6}
-.how-video{margin:.8rem 0 0;padding:.9rem;border-radius:14px;text-align:center;font-size:.85rem;
-  color:var(--mute) !important;border:1px dashed var(--line)}
 </style>
 </head>
 <body>
@@ -2195,10 +2193,11 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
       <div class="howto">
         <h2 class="fb-title" data-i18n="howTitle">如何使用</h2>
         <ol class="how-steps">
-          <li data-i18n="howStep1">一個人按「開一個新房間」。</li>
-          <li data-i18n="howStep2">按「邀請團員」傳連結，或按「QR code」讓大家用相機掃。</li>
-          <li data-i18n="howStep3">每個人戴上耳機，打開「我的耳機延遲」，調到跟大家一致。</li>
-          <li data-i18n="howStep4">按「開始」，全團聽到同一拍。</li>
+          <li data-i18n="howStep1">按「開一個新房間」</li>
+          <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
+          <li data-i18n="howStep3">等大家都進房間後，按開始</li>
+          <li data-i18n="howStep4">對拍：以「聲音出現最快的人」為準，其他慢的人，就把「我的耳機延遲」往右拉，拉到聲音對齊。（當然，外放也一樣）</li>
+          <li data-i18n="howStep5">享受你們的團練 🥁</li>
         </ol>
         <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
         <ul class="how-tips">
@@ -2207,7 +2206,6 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
           <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
           <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
         </ul>
-        <p class="how-video" data-i18n="howVideo">影片教學即將推出</p>
       </div>
     </div>
   </section>
@@ -2761,16 +2759,16 @@ const UI_ZH = {
   qrFail:      'QR code 產生不出來，請檢查網路',
   tabHowto:    '如何使用',
   howTitle:    '如何使用',
-  howStep1:    '一個人按「開一個新房間」。',
-  howStep2:    '按「邀請團員」傳連結，或按「QR code」讓大家用相機掃。',
-  howStep3:    '每個人戴上耳機，打開「我的耳機延遲」，調到跟大家一致。',
-  howStep4:    '按「開始」，全團聽到同一拍。',
+  howStep1:    '按「開一個新房間」',
+  howStep2:    '按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃',
+  howStep3:    '等大家都進房間後，按開始',
+  howStep4:    '對拍：以「聲音出現最快的人」為準，其他慢的人，就把「我的耳機延遲」往右拉，拉到聲音對齊。（當然，外放也一樣）',
+  howStep5:    '享受你們的團練 🥁',
   howTipsTitle:'小提醒',
   howTip1:     '有線耳機最準；藍牙耳機大約要調 120–250。',
   howTip2:     'iPhone 的靜音開關要關掉，不然可能沒有聲音。',
   howTip3:     '沒有聲音時，按節拍器頁最下面的「重置音訊」。',
   howTip4:     '房主可以把房間上鎖，鎖上後只有房主能改設定。',
-  howVideo:    '影片教學即將推出',
   resetAudio:  '沒有聲音？重置音訊',
   leave:       '離開房間',
   audioInfo:   (state, n) => '音訊：' + state + (n ? ' 已重建 ' + n + ' 次' : ''),
@@ -2980,16 +2978,16 @@ const UI_EN = {
   qrFail:      'Couldn’t make the QR code. Check your connection',
   tabHowto:    'How to use',
   howTitle:    'How to use',
-  howStep1:    'One person taps “Create a new room”.',
-  howStep2:    'Tap “Invite” to send the link, or “QR code” so everyone can scan it.',
-  howStep3:    'Everyone puts on headphones and adjusts “My headphone delay” until they line up.',
-  howStep4:    'Tap “Start” — the whole band hears the same beat.',
+  howStep1:    'Tap “Create a new room”',
+  howStep2:    'Tap “Invite” and drop the link in your group chat, or just show everyone the QR code',
+  howStep3:    'Once everyone’s in the room, tap Start',
+  howStep4:    'Sync up: the person whose sound comes out first is the reference. Everyone who’s behind drags “My headphone delay” to the right until the sound lines up. (Same goes for speakers, of course)',
+  howStep5:    'Enjoy your rehearsal 🥁',
   howTipsTitle:'Tips',
   howTip1:     'Wired headphones are the most accurate; Bluetooth usually needs about 120–250.',
   howTip2:     'On iPhone, turn off the silent switch or you may hear nothing.',
   howTip3:     'No sound? Tap “Reset audio” at the bottom of the Metronome tab.',
   howTip4:     'The host can lock the room so only they can change settings.',
-  howVideo:    'Video tutorial coming soon',
   resetAudio:  'No sound? Reset audio',
   leave:       'Leave room',
   audioInfo:   (state, n) => 'Audio: ' + state + (n ? ' · rebuilt ' + n + (n === 1 ? ' time' : ' times') : ''),
