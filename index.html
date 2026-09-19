@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="theme-color" content="#F9FAFB">
-<title>同步節拍器</title>
+<title>同步節拍器｜全團耳機同步的線上節拍器</title>
 <!-- 伺服器會在這裡換上 LINE 等分享預覽卡片用的 og: 標籤 -->
 <!--OG-->
 <link rel="manifest" href="/manifest.json">
@@ -2372,7 +2372,9 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
   // 語言：記在裝置裡的優先；沒選過就看手機的語言設定，中文用中文，其他都用英文。
   // 要在最早這段決定，網頁標題才來得及換。（加入主畫面的名稱中英文版都是 Sync Metronome，不用換）
   let lang = null;
-  try { lang = localStorage.getItem('mmLang'); } catch(e){}
+  // 搜尋引擎收錄的中文版、英文版網址（?lang=zh／?lang=en）最優先；只在這次有效，不記下來
+  try { lang = new URLSearchParams(location.search).get('lang'); } catch(e){}
+  if (lang !== 'zh' && lang !== 'en'){ try { lang = localStorage.getItem('mmLang'); } catch(e){} }
   if (lang !== 'zh' && lang !== 'en'){
     const langs = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ''];
     lang = langs.some(l => /^zh/i.test(l)) ? 'zh' : 'en';
@@ -2381,7 +2383,8 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
   // 分享卡片和 QR code 要用同一組顏色（伺服器那邊照這個編號畫卡片）
   window.MM_PALETTE = { idx, primary: p.primary, soft: p.primarySoft, deep: p.navy };
   root.lang = lang === 'en' ? 'en' : 'zh-Hant';
-  document.title = (lang === 'en' ? 'Sync Metronome' : '同步節拍器') + ' · ' + p.name;
+  // 標題固定（不放配色名稱），搜尋結果和分頁上看到的才會一致
+  document.title = lang === 'en' ? 'Sync Metronome — Online Metronome for Bands' : '同步節拍器｜全團耳機同步的線上節拍器';
   const theme = document.querySelector('meta[name="theme-color"]');
   if (theme) theme.setAttribute('content', p.surface);
   root.dataset.palette = p.name;
@@ -5705,6 +5708,9 @@ $('langZh').classList.toggle('on', LANG === 'zh');
 $('langEn').classList.toggle('on', LANG === 'en');
 function setLang(l){
   if (l === LANG) return;
+  // 從搜尋結果點進來的網址帶著 ?lang=，要先拿掉，不然重新整理後又會被它換回去
+  const u = new URL(location.href);
+  if (u.searchParams.has('lang')){ u.searchParams.delete('lang'); history.replaceState(null, '', u.pathname + u.search + u.hash); }
   try { localStorage.setItem('mmLang', l); } catch(e){}
   location.reload();
 }

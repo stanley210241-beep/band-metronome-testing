@@ -386,25 +386,90 @@ function shareParams(query) {
 
 const escHtml = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// 預覽卡片的標題、說明、圖片網址（要完整網址，LINE 才抓得到）
-function ogTags(req, query) {
-  const { p, room, en } = shareParams(query);
+/* ---------- 搜尋引擎 ----------
+   只有精簡版（對外公開的那個）讓搜尋引擎收錄；測試版一律標「不要收錄」，
+   免得兩個內容幾乎一樣的網站互搶、或讓大家搜到還沒做好的東西。
+   網頁的語言平常看手機設定，但 Google 的爬蟲是英文的，所以另外給兩個固定網址：
+   /?lang=zh（中文版）、/?lang=en（英文版），並在 <head> 標明它們是同一頁的兩種語言。 */
+const INDEXABLE = SITE === 'lite';
+
+const SEO = {
+  zh: { title: '同步節拍器｜全團耳機同步的線上節拍器',
+        desc: '免費的線上節拍器，專為樂團團練設計：同一個房間的人，耳機裡聽到同一拍。開房間、傳連結或掃 QR code 就能一起對拍，藍牙耳機的延遲也能自己微調。手機打開網頁就能用，免下載、免註冊。' },
+  en: { title: 'Sync Metronome — Online Metronome for Bands',
+        desc: 'A free online metronome for band rehearsals: everyone in the room hears the same click in their headphones. Share a link or QR code to play in time together, and fine-tune Bluetooth headphone delay. Works in your phone’s browser — no app, no sign-up.' },
+};
+
+function originOf(req) {
   const proto = String(req.headers['x-forwarded-proto'] || 'http').split(',')[0];
-  const origin = proto + '://' + req.headers.host;
-  const title = room
-    ? (en ? 'Join room ' + room + ' · Sync Metronome' : '一起加入房間 ' + room + '｜同步節拍器')
-    : (en ? 'Sync Metronome' : '同步節拍器｜全團耳機裡聽到同一拍');
-  const desc = en ? 'Tap to join. Everyone in the room hears the same beat in their headphones.'
-                  : '點開就能加入。同一個房間的人，耳機裡聽到同一拍。';
+  return proto + '://' + req.headers.host;
+}
+
+// 網址指定的語言：?lang=zh／?lang=en（搜尋引擎用）；沒有的話看邀請連結的 l=en
+function pageLang(query) {
+  const l = new URLSearchParams(query || '').get('lang');
+  return l === 'en' || l === 'zh' ? l : '';
+}
+
+// 塞進 <head> 的東西：搜尋結果的說明、中英文對照、結構化資料，以及 LINE 預覽卡片的標題、說明、圖片
+function headTags(req, query) {
+  const { p, room, en: inviteEn } = shareParams(query);
+  const forced = pageLang(query);
+  const en = forced ? forced === 'en' : inviteEn;
+  const T = SEO[en ? 'en' : 'zh'];
+  const origin = originOf(req);
+  const home = origin + '/';
+  // 邀請連結（有房號）的預覽卡片寫「一起加入房間」；一般網址用網站介紹
+  const ogTitle = room ? (en ? 'Join room ' + room + ' · Sync Metronome' : '一起加入房間 ' + room + '｜同步節拍器') : T.title;
+  const ogDesc = room ? (en ? 'Tap to join. Everyone in the room hears the same beat in their headphones.'
+                            : '點開就能加入。同一個房間的人，耳機裡聽到同一拍。') : T.desc;
   const img = origin + '/card.png?p=' + p + (room ? '&r=' + room : '');
+  const app = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: '同步節拍器 Sync Metronome',
+    alternateName: ['同步節拍器', 'Sync Metronome'],
+    url: home,
+    description: T.desc,
+    applicationCategory: 'MultimediaApplication',
+    operatingSystem: 'Any (web browser)',
+    browserRequirements: 'Requires JavaScript and Web Audio',
+    inLanguage: ['zh-Hant', 'en'],
+    isAccessibleForFree: true,
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'TWD' },
+    image: origin + '/card.png?p=1',
+  };
+  const meta = (k, v, attr = 'property') => '<meta ' + attr + '="' + k + '" content="' + escHtml(v) + '">';
   return [
-    ['og:type', 'website'], ['og:site_name', en ? 'Sync Metronome' : '同步節拍器'],
-    ['og:title', title], ['og:description', desc], ['og:image', img],
-    ['og:image:width', CARD_W], ['og:image:height', CARD_H],
-  ].map(([k, v]) => '<meta property="' + k + '" content="' + escHtml(v) + '">')
-   .concat('<meta name="twitter:card" content="summary_large_image">',
-           '<meta name="description" content="' + escHtml(desc) + '">')
-   .join('\n');
+    INDEXABLE ? '' : '<meta name="robots" content="noindex, nofollow">',
+    meta('description', T.desc, 'name'),
+    '<link rel="canonical" href="' + escHtml(home + (forced ? '?lang=' + forced : '')) + '">',
+    '<link rel="alternate" hreflang="zh-Hant" href="' + home + '?lang=zh">',
+    '<link rel="alternate" hreflang="en" href="' + home + '?lang=en">',
+    '<link rel="alternate" hreflang="x-default" href="' + home + '">',
+    meta('og:type', 'website'), meta('og:site_name', en ? 'Sync Metronome' : '同步節拍器'),
+    meta('og:locale', en ? 'en_US' : 'zh_TW'),
+    meta('og:title', ogTitle), meta('og:description', ogDesc), meta('og:image', img),
+    meta('og:image:width', CARD_W), meta('og:image:height', CARD_H),
+    meta('twitter:card', 'summary_large_image', 'name'),
+    '<script type="application/ld+json">' + JSON.stringify(app).replace(/</g, '\\u003c') + '</script>',
+  ].filter(Boolean).join('\n');
+}
+
+function robotsTxt(req) {
+  if (!INDEXABLE) return 'User-agent: *\nAllow: /\n';   // 讓爬蟲進來看到「不要收錄」的標記
+  return 'User-agent: *\nAllow: /\nDisallow: /feedback\n\nSitemap: ' + originOf(req) + '/sitemap.xml\n';
+}
+
+function sitemapXml(req) {
+  const home = originOf(req) + '/';
+  const alt = '\n    <xhtml:link rel="alternate" hreflang="zh-Hant" href="' + home + '?lang=zh"/>' +
+              '\n    <xhtml:link rel="alternate" hreflang="en" href="' + home + '?lang=en"/>' +
+              '\n    <xhtml:link rel="alternate" hreflang="x-default" href="' + home + '"/>';
+  const url = loc => '  <url>\n    <loc>' + loc + '</loc>' + alt + '\n  </url>';
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n' +
+         [home, home + '?lang=zh', home + '?lang=en'].map(url).join('\n') + '\n</urlset>\n';
 }
 
 /* ---------- 網頁 ---------- */
@@ -412,8 +477,19 @@ function ogTags(req, query) {
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?') + 1) : '';
+  if (!INDEXABLE) res.setHeader('X-Robots-Tag', 'noindex, nofollow');   // 測試版：所有網址都不要收錄
 
   if (url === '/feedback') return handleFeedback(req, res);
+  if (url === '/robots.txt') {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end(robotsTxt(req));
+    return;
+  }
+  if (url === '/sitemap.xml' && INDEXABLE) {
+    res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8' });
+    res.end(sitemapXml(req));
+    return;
+  }
   if (url === '/card.png') {
     const { p, room } = shareParams(query);
     try {
@@ -447,8 +523,10 @@ const server = http.createServer((req, res) => {
       return;
     }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    // 把預覽卡片的資訊塞進 <head>（LINE 抓的是伺服器給的原始網頁，不會跑 JavaScript）
-    res.end(data.toString('utf8').replace('<!--OG-->', ogTags(req, query)));
+    // 把搜尋引擎和預覽卡片要的資訊塞進 <head>（LINE 抓的是伺服器給的原始網頁，不會跑 JavaScript）
+    let html = data.toString('utf8').replace('<!--OG-->', headTags(req, query));
+    if (pageLang(query) === 'en') html = html.replace('<html lang="zh-Hant">', '<html lang="en">');
+    res.end(html);
   });
 });
 
