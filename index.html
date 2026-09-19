@@ -1832,6 +1832,9 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
 .how-sub{margin:.6rem 0 0;font-size:.9rem;font-weight:700;color:var(--navy) !important}
 .how-tips{margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:.35rem;
   color:var(--mute) !important;font-size:.84rem;line-height:1.6}
+/* 房主的耳機延遲鎖住：滑桿和 −／＋ 變淡、不能按 */
+.latrow button:disabled,#latRange:disabled{opacity:.35;cursor:not-allowed}
+.lat-owner{color:var(--brass) !important;font-weight:600}
 </style>
 </head>
 <body>
@@ -2071,11 +2074,13 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
       <summary><span data-i18n="latTitle">我的耳機延遲</span> <b id="latLabel">0 ms</b></summary>
       <div class="latrow">
         <button class="mini" id="latMinus" aria-label="延遲減 5 毫秒" data-i18n-aria="latLess">−</button>
-        <input id="latRange" type="range" min="0" max="400" step="5" value="0" aria-label="耳機延遲" data-i18n-aria="latAria">
+        <input id="latRange" type="range" min="-400" max="400" step="5" value="0" aria-label="耳機延遲" data-i18n-aria="latAria">
         <button class="mini" id="latPlus" aria-label="延遲加 5 毫秒" data-i18n-aria="latMore">＋</button>
       </div>
-      <p class="hint" data-i18n="latHint1">如果你聽到的拍子比別人慢，往右拉，直到跟大家一致。
-        有線耳機通常不用調，藍牙耳機大約在 120–250 之間。這個設定只影響你自己。</p>
+      <!-- 房主是大家對拍的基準，他的延遲鎖住不能調（只鎖不歸零：換房主時聲音才不會突然變） -->
+      <p class="hint lat-owner" id="latOwnerNote" data-i18n="latOwner" hidden>你是房主，大家以你為準，你的延遲不用調（也調不了）。</p>
+      <p class="hint" data-i18n="latHint1">以房主為準：你聽到的拍子比房主慢就往右拉，比房主快就往左拉，直到跟房主一致。
+        有線耳機通常不用調，藍牙耳機大約要往右 120–250。這個設定只影響你自己。</p>
       <p class="hint" data-i18n="latHint2">聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。
         長時間大音量會傷聽力，而且是不可逆的。</p>
     </details>
@@ -2196,7 +2201,7 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
           <li data-i18n="howStep1">按「開一個新房間」</li>
           <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
           <li data-i18n="howStep3">等大家都進房間後，按開始</li>
-          <li data-i18n="howStep4">對拍：以「聲音出現最快的人」為準，其他慢的人，就把「我的耳機延遲」往右拉，拉到聲音對齊。（當然，外放也一樣）</li>
+          <li data-i18n="howStep4">對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）</li>
           <li data-i18n="howStep5">享受你們的團練 🥁</li>
         </ol>
         <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
@@ -2205,6 +2210,7 @@ html[data-mode="dark"] .invite-btn{color:var(--brass-2) !important}
           <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
           <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
           <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
+          <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
         </ul>
       </div>
     </div>
@@ -2710,7 +2716,8 @@ const UI_ZH = {
   latAria:     '耳機延遲',
   latLess:     '延遲減 5 毫秒',
   latMore:     '延遲加 5 毫秒',
-  latHint1:    '如果你聽到的拍子比別人慢，往右拉，直到跟大家一致。有線耳機通常不用調，藍牙耳機大約在 120–250 之間。這個設定只影響你自己。',
+  latHint1:    '以房主為準：你聽到的拍子比房主慢就往右拉，比房主快就往左拉，直到跟房主一致。有線耳機通常不用調，藍牙耳機大約要往右 120–250。這個設定只影響你自己。',
+  latOwner:    '你是房主，大家以你為準，你的延遲不用調（也調不了）。',
   latHint2:    '聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。長時間大音量會傷聽力，而且是不可逆的。',
 
   // 最下面
@@ -2765,13 +2772,14 @@ const UI_ZH = {
   howStep1:    '按「開一個新房間」',
   howStep2:    '按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃',
   howStep3:    '等大家都進房間後，按開始',
-  howStep4:    '對拍：以「聲音出現最快的人」為準，其他慢的人，就把「我的耳機延遲」往右拉，拉到聲音對齊。（當然，外放也一樣）',
+  howStep4:    '對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）',
   howStep5:    '享受你們的團練 🥁',
   howTipsTitle:'小提醒',
   howTip1:     '有線耳機最準；藍牙耳機大約要調 120–250。',
   howTip2:     'iPhone 的靜音開關要關掉，不然可能沒有聲音。',
   howTip3:     '沒有聲音時，按節拍器頁最下面的「重置音訊」。',
   howTip4:     '房主可以把房間上鎖，鎖上後只有房主能改設定。',
+  howTip5:     '房主換了耳機的話，其他人要重新對一次。',
   resetAudio:  '沒有聲音？重置音訊',
   leave:       '離開房間',
   audioInfo:   (state, n) => '音訊：' + state + (n ? ' 已重建 ' + n + ' 次' : ''),
@@ -2932,7 +2940,8 @@ const UI_EN = {
   latAria:     'Headphone delay',
   latLess:     'Delay −5 ms',
   latMore:     'Delay +5 ms',
-  latHint1:    'If you hear the beat later than everyone else, drag right until you line up. Wired headphones usually need nothing; Bluetooth is typically around 120–250. This only affects you.',
+  latHint1:    'The host is the reference: if you hear the beat later than the host, drag right; if earlier, drag left — until you line up. Wired headphones usually need nothing; Bluetooth is typically around +120 to +250. This only affects you.',
+  latOwner:    'You’re the host, so everyone syncs to you — your delay stays put.',
   latHint2:    'Can’t hear it? Try better-isolating headphones before turning the volume up. Long exposure to loud sound damages hearing permanently.',
 
   setsTitle:   'Setlists',
@@ -2984,13 +2993,14 @@ const UI_EN = {
   howStep1:    'Tap “Create a new room”',
   howStep2:    'Tap “Invite” and drop the link in your group chat, or just show everyone the QR code',
   howStep3:    'Once everyone’s in the room, tap Start',
-  howStep4:    'Sync up: the person whose sound comes out first is the reference. Everyone who’s behind drags “My headphone delay” to the right until the sound lines up. (Same goes for speakers, of course)',
+  howStep4:    'Sync up: the host is the reference and doesn’t adjust. Everyone else: if you’re behind the host, drag “My headphone delay” right; if you’re ahead, drag it left — until the sound lines up. (Same goes for speakers, of course)',
   howStep5:    'Enjoy your rehearsal 🥁',
   howTipsTitle:'Tips',
   howTip1:     'Wired headphones are the most accurate; Bluetooth usually needs about 120–250.',
   howTip2:     'On iPhone, turn off the silent switch or you may hear nothing.',
   howTip3:     'No sound? Tap “Reset audio” at the bottom of the Metronome tab.',
   howTip4:     'The host can lock the room so only they can change settings.',
+  howTip5:     'If the host switches headphones, everyone else needs to sync up again.',
   resetAudio:  'No sound? Reset audio',
   leave:       'Leave room',
   audioInfo:   (state, n) => 'Audio: ' + state + (n ? ' · rebuilt ' + n + (n === 1 ? ' time' : ' times') : ''),
@@ -5028,6 +5038,7 @@ function renderLock(){
   b.classList.toggle('ro', !st.isOwner);
   b.title = st.isOwner ? UI.lockOwner : UI.lockOther;
   $('shared').classList.toggle('off', !canControl());
+  renderLatLock();
 }
 
 // 鎖住時不是讓整區點不動，而是攔下來告訴你為什麼沒用
@@ -5485,19 +5496,29 @@ $('muteBtn').onclick = () => {
 renderMuteBtn();
 
 // 耳機延遲（每個人自己的，不受鎖影響）。滑桿之外兩邊有 −／＋ 一次微調 5 毫秒，按住會連續調。
-const LAT_MIN = 0, LAT_MAX = 400, LAT_STEP = 5;
+// 大家都以房主為準：比房主慢往右（正數，提早發聲）、比房主快往左（負數，晚一點發聲）。
+// 房主自己是基準，在房間裡時鎖住不能調（只鎖不歸零，換房主時才不會整團亂掉）。
+const LAT_MIN = -400, LAT_MAX = 400, LAT_STEP = 5;
+const latText = v => (v > 0 ? '+' : '') + v + ' ms';
+const latLocked = () => !!st.code && st.isOwner;
+function renderLatLock(){
+  const lock = latLocked();
+  for (const id of ['latRange', 'latMinus', 'latPlus']) $(id).disabled = lock;
+  $('latOwnerNote').hidden = !lock;
+}
 function setLatency(v){
+  if (latLocked()) return;
   v = clamp(Math.round(v), LAT_MIN, LAT_MAX);
   if (v === myLatency) return;
   myLatency = v;
   $('latRange').value = v;
-  $('latLabel').textContent = v + ' ms';
+  $('latLabel').textContent = latText(v);
   localStorage.setItem('mmLatency', v);
   anchor = null;
   reschedule();
 }
 $('latRange').value = myLatency;
-$('latLabel').textContent = myLatency + ' ms';
+$('latLabel').textContent = latText(myLatency);
 $('latRange').addEventListener('input', e => setLatency(Number(e.target.value)));
 holdable($('latMinus'), () => setLatency(myLatency - LAT_STEP));
 holdable($('latPlus'),  () => setLatency(myLatency + LAT_STEP));
