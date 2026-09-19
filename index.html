@@ -1891,6 +1891,20 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 .me-h{margin:.4rem 0 0;font-size:.98rem;font-weight:700;color:var(--navy) !important}
 .me .fb-title{display:none}
 .me-sheet{max-height:86vh;overflow:auto;padding-top:3.2rem}
+/* 頂部列的使用說明「?」：跟靜音鍵一樣大的圓形按鈕 */
+#room .bar-right #helpBtn{padding:0;width:2.05rem}
+#helpBtn svg{width:1.15rem;height:1.15rem;display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.help-sheet{max-height:86vh;overflow:auto}
+/* 手機上頂部列要擠一排：按鈕高度不變，只把間距和左右留白縮一點 */
+@media (max-width:420px){
+  #room .bar{gap:.3rem}
+  #room .bar-left{gap:.35rem}
+  #room .bar-right{gap:.22rem}
+  #room .bar-right button.chip{padding:0 .55rem}
+  #room .bar-right #muteBtn{padding:0 .5rem}
+  #room .bar-right #helpBtn{padding:0;width:2.05rem}
+  #room .bar-info{margin-left:.1rem}
+}
 </style>
 </head>
 <body>
@@ -1970,6 +1984,8 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
         <div class="roomcode" id="roomCode">----<small><span data-i18n="roomWord">房號</span><span class="role" id="roleTag"></span></small></div>
       </div>
       <div class="bar-right">
+        <!-- 使用說明：只放圖示，頂部列才放得下；點了跳出說明視窗 -->
+        <button class="chip" id="helpBtn" aria-label="使用說明" data-i18n-aria="howTitle" title="使用說明" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><path d="M12 16.9v.1"/></svg></button>
         <button class="chip" id="muteBtn" aria-label="靜音" data-i18n-aria="muteAria"></button>
         <button class="chip" id="lockBtn" data-i18n="open">開放</button>
         <!-- 只顯示、不能按的資訊：人數在上、對時誤差在下，不加框，放最右邊 -->
@@ -2289,25 +2305,6 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
           </div>
         </section>
 
-        <!-- 如何使用（之後會換成影片） -->
-        <section class="me-sec howto">
-          <h3 class="me-h" data-i18n="howTitle">如何使用</h3>
-          <ol class="how-steps">
-            <li data-i18n="howStep1">按「開一個新房間」</li>
-            <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
-            <li data-i18n="howStep3">等大家都進房間後，按開始</li>
-            <li data-i18n="howStep4">對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）</li>
-            <li data-i18n="howStep5">享受你們的團練 🥁</li>
-          </ol>
-          <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
-          <ul class="how-tips">
-            <li data-i18n="howTip1">有線耳機最準；藍牙耳機大約要調 120–250。</li>
-            <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
-            <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
-            <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
-            <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
-          </ul>
-        </section>
       </div>
     </div>
   </section>
@@ -2343,6 +2340,31 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
   <div id="fbSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="fbTitle" hidden>
     <div class="sheet-card" id="fbSheetCard">
       <button class="sheet-close" id="fbClose" aria-label="關閉" data-i18n-aria="close">×</button>
+    </div>
+  </div>
+
+  <!-- 使用說明：房間頂部列的「?」按鈕打開（之後會換成影片） -->
+  <div id="helpSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="helpTitle" hidden>
+    <div class="sheet-card help-sheet">
+      <button class="sheet-close" id="helpClose" aria-label="關閉" data-i18n-aria="close">×</button>
+      <div class="howto">
+        <h2 class="fb-title" id="helpTitle" data-i18n="howTitle">使用說明</h2>
+        <ol class="how-steps">
+          <li data-i18n="howStep1">按「開一個新房間」</li>
+          <li data-i18n="howStep2">按「邀請團員」把連結丟進你們群組，或直接秀 QR code 給大家掃</li>
+          <li data-i18n="howStep3">等大家都進房間後，按開始</li>
+          <li data-i18n="howStep4">對拍：以房主為準，房主的延遲不用調。其他人比房主慢，就把「我的耳機延遲」往右拉；比房主快，就往左拉，拉到聲音對齊。（當然，外放也一樣）</li>
+          <li data-i18n="howStep5">享受你們的團練 🥁</li>
+        </ol>
+        <h3 class="how-sub" data-i18n="howTipsTitle">小提醒</h3>
+        <ul class="how-tips">
+          <li data-i18n="howTip1">有線耳機最準；藍牙耳機大約要調 120–250。</li>
+          <li data-i18n="howTip2">iPhone 的靜音開關要關掉，不然可能沒有聲音。</li>
+          <li data-i18n="howTip3">沒有聲音時，按節拍器頁最下面的「重置音訊」。</li>
+          <li data-i18n="howTip4">房主可以把房間上鎖，鎖上後只有房主能改設定。</li>
+          <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
+        </ul>
+      </div>
     </div>
   </div>
 
@@ -2866,7 +2888,7 @@ const UI_ZH = {
   close:       '關閉',
   qrHint:      '用相機掃描，加入這個房間',
   qrFail:      'QR code 產生不出來，請檢查網路',
-  howTitle:    '如何使用',
+  howTitle:    '使用說明',
   tabMe:       '我的',
   meGuest:     '還沒登入',
   meGuestHint: '登入後，曲目、歌單和之後的簽到紀錄會存在雲端，換手機也不會不見。',
@@ -3099,7 +3121,7 @@ const UI_EN = {
   close:       'Close',
   qrHint:      'Scan with your camera to join this room',
   qrFail:      'Couldn’t make the QR code. Check your connection',
-  howTitle:    'How to use',
+  howTitle:    'User guide',
   tabMe:       'Me',
   meGuest:     'Not signed in',
   meGuestHint: 'Sign in to keep your songs, setlists and (soon) check-ins in the cloud, even if you switch phones.',
@@ -5759,12 +5781,13 @@ function closeSheet(id){
   s.classList.remove('show');
   setTimeout(() => { s.hidden = true; }, 180);
 }
-for (const id of ['fbSheet', 'qrSheet']){
+for (const id of ['fbSheet', 'qrSheet', 'helpSheet']){
   $(id).addEventListener('click', e => { if (e.target.id === id) closeSheet(id); });   // 點外面關掉
 }
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('qrSheet').hidden) closeSheet('qrSheet');
+  if (!$('helpSheet').hidden) closeSheet('helpSheet');
   if (!$('fbSheet').hidden) $('fbClose').click();
 });
 
@@ -5775,6 +5798,10 @@ $('qrBtn').onclick = async () => {
   openSheet('qrSheet');
 };
 $('qrClose').onclick = () => closeSheet('qrSheet');
+
+// 使用說明（頂部列的「?」）
+$('helpBtn').onclick = () => { $('helpSheet').querySelector('.help-sheet').scrollTop = 0; openSheet('helpSheet'); };
+$('helpClose').onclick = () => closeSheet('helpSheet');
 
 // 首頁的「意見回饋」：把房間裡那份表單搬進彈出視窗，關掉再搬回去（同一份表單，不用寫兩次）
 $('gateFb').onclick = () => {
