@@ -1905,6 +1905,11 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
   #room .bar-right #helpBtn{padding:0;width:2.05rem}
   #room .bar-info{margin-left:.1rem}
 }
+/* 離開房間的確認視窗 */
+.leave-card{max-width:20rem;text-align:center;padding:1.4rem 1.1rem 1.1rem}
+.leave-card p{margin:0 0 1rem;font-size:.95rem;line-height:1.6;color:var(--navy)}
+.leave-opts{display:flex;gap:.6rem}
+.leave-opts .btn{flex:1;height:2.8rem;font-size:.92rem}
 </style>
 </head>
 <body>
@@ -1979,7 +1984,8 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
       <div class="bar-left">
         <!-- 離開房間：放在房號左邊，像一般 app 的返回鍵 -->
         <button class="chip backbtn" id="leaveBtn" aria-label="離開房間" data-i18n-aria="leave">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <!-- 門＋箭頭：這顆是「離開房間」，不是回上一頁（換頁交給底部分頁列和手機的返回鍵） -->
+          <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 2.5H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h5.5"/><path d="M11.5 5.5 14 8l-2.5 2.5M13.5 8H6.5"/></svg>
         </button>
         <div class="roomcode" id="roomCode">----<small><span data-i18n="roomWord">房號</span><span class="role" id="roleTag"></span></small></div>
       </div>
@@ -2340,6 +2346,17 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
   <div id="fbSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="fbTitle" hidden>
     <div class="sheet-card" id="fbSheetCard">
       <button class="sheet-close" id="fbClose" aria-label="關閉" data-i18n-aria="close">×</button>
+    </div>
+  </div>
+
+  <!-- 離開房間前的確認：只有「節拍器正在響」或「你是房主而且還有別人在」時才會跳出來 -->
+  <div id="leaveSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="leaveText" hidden>
+    <div class="sheet-card leave-card">
+      <p id="leaveText"></p>
+      <div class="leave-opts">
+        <button class="btn btn-quiet" id="leaveNo" data-i18n="leaveNo">留下</button>
+        <button class="btn btn-solid" id="leaveYes" data-i18n="leaveYes">離開</button>
+      </div>
     </div>
   </div>
 
@@ -2915,6 +2932,10 @@ const UI_ZH = {
   howTip5:     '房主換了耳機的話，其他人要重新對一次。',
   resetAudio:  '沒有聲音？重置音訊',
   leave:       '離開房間',
+  leaveRunning:'節拍器正在響，要離開房間嗎？',
+  leaveOwner:  '你是房主，離開後大家要重新對拍。要離開嗎？',
+  leaveYes:    '離開',
+  leaveNo:     '留下',
   audioInfo:   (state, n) => '音訊：' + state + (n ? ' 已重建 ' + n + ' 次' : ''),
   audioNone:   '尚未啟動',
 };
@@ -3148,6 +3169,10 @@ const UI_EN = {
   howTip5:     'If the host switches headphones, everyone else needs to sync up again.',
   resetAudio:  'No sound? Reset audio',
   leave:       'Leave room',
+  leaveRunning:'The metronome is playing. Leave the room?',
+  leaveOwner:  'You’re the host — everyone will have to sync up again. Leave?',
+  leaveYes:    'Leave',
+  leaveNo:     'Stay',
   audioInfo:   (state, n) => 'Audio: ' + state + (n ? ' · rebuilt ' + n + (n === 1 ? ' time' : ' times') : ''),
   audioNone:   'not started',
 };
@@ -5219,6 +5244,7 @@ function showRoom(){
   if (!$('meSheet').hidden) closeMe();     // 點邀請連結直接進房時，「我的」視窗可能還開著
   showTab('metro');
   swapScreen('room', 'fwd');
+  pushRoomState();
 }
 
 // 大廳和房間之間換畫面：舊的先淡出，新的再滑進來。
@@ -5781,13 +5807,14 @@ function closeSheet(id){
   s.classList.remove('show');
   setTimeout(() => { s.hidden = true; }, 180);
 }
-for (const id of ['fbSheet', 'qrSheet', 'helpSheet']){
+for (const id of ['fbSheet', 'qrSheet', 'helpSheet', 'leaveSheet']){
   $(id).addEventListener('click', e => { if (e.target.id === id) closeSheet(id); });   // 點外面關掉
 }
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('qrSheet').hidden) closeSheet('qrSheet');
   if (!$('helpSheet').hidden) closeSheet('helpSheet');
+  if (!$('leaveSheet').hidden) $('leaveNo').click();     // 按 Esc 等於選「留下」
   if (!$('fbSheet').hidden) $('fbClose').click();
 });
 
@@ -5853,11 +5880,48 @@ function backToGate(){
 }
 
 $('leaveBtn').title = UI.leave;     // 滑鼠移上去時的提示
-$('leaveBtn').onclick = () => {
+/* ---------- 離開房間 ----------
+   左上角那顆是「離開房間」；換頁交給底部分頁列。
+   手機的返回鍵／返回手勢：在其他分頁先回節拍器頁，在節拍器頁再按一次才離開。
+   只有「節拍器正在響」或「你是房主、房裡還有別人」時才問一次，不然每次都問很煩。 */
+function doLeave(){
   send({ t:'leave' });
   backToGate();
   $('code').value = '';
+}
+
+function leaveNeedsAsk(){
+  return !!st.code && (st.running || (st.isOwner && st.people > 1));
+}
+
+let leaveThen = null;
+function askLeave(then){
+  $('leaveText').textContent = st.running ? UI.leaveRunning : UI.leaveOwner;
+  leaveThen = then;
+  openSheet('leaveSheet');
+}
+$('leaveYes').onclick = () => {
+  closeSheet('leaveSheet');
+  const go = leaveThen; leaveThen = null;
+  if (go) go();
 };
+$('leaveNo').onclick = () => { closeSheet('leaveSheet'); leaveThen = null; };
+
+function tryLeave(){
+  if (leaveNeedsAsk()) askLeave(doLeave); else doLeave();
+}
+$('leaveBtn').onclick = tryLeave;
+
+// 進房間時在瀏覽紀錄裡放一格，按返回才有東西可以退
+function pushRoomState(){
+  try { history.pushState({ mm: 'room' }, '', '#' + st.code); } catch(e){}
+}
+window.addEventListener('popstate', () => {
+  if (!st.code) return;                       // 已經在大廳，交給瀏覽器自己處理
+  if (curTab !== 'metro'){ showTab('metro'); pushRoomState(); return; }
+  if (leaveNeedsAsk()){ pushRoomState(); askLeave(doLeave); return; }
+  doLeave();
+});
 
 /* ---------- 13. 螢幕不要睡著 ---------- */
 
