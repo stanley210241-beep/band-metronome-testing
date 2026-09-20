@@ -1910,6 +1910,9 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 .leave-card p{margin:0 0 1rem;font-size:.95rem;line-height:1.6;color:var(--navy)}
 .leave-opts{display:flex;gap:.6rem}
 .leave-opts .btn{flex:1;height:2.8rem;font-size:.92rem}
+/* 我的細分：8 顆按鈕一排塞不下，改成自動換行，不要用左右捲動（使用者不會發現右邊還有東西） */
+.mysub-row{flex-wrap:wrap;overflow:visible;row-gap:4px}
+.mysub-row .mysub-follow{flex:0 0 auto;min-width:0;padding:.5rem .6rem;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -2142,6 +2145,14 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
           <span data-i18n="muteBars">小節</span>
         </span>
       </div>
+    </details>
+
+    <!-- 我的細分（每個人自己的，不受鎖影響）。主拍時刻完全不變，只是這支手機多聽或少聽幾顆細分，
+         所以跟大家還是對齊的：貝斯手可以只聽主拍，鼓手可以聽十六分 -->
+    <details>
+      <summary><span data-i18n="mySubTitle">我的細分</span> <b id="mySubLabel" data-i18n="mySubFollow">跟著房間</b></summary>
+      <div class="chips mysub-row" id="mySubRow"></div>
+      <p class="hint" data-i18n="mySubHint">只改你自己聽到的細分，拍子還是跟大家一樣。</p>
     </details>
 
     <!-- 耳機延遲 -->
@@ -2613,6 +2624,12 @@ function needsServerSetup(){
 
 const SUB_LIST = [1, 2, 3, 4, 5, 6, 7];
 
+// 我的細分：0 = 跟著房間。只換這支手機聽到的細分，主拍時刻不變，所以不會跟別人跑掉。
+// 實際用的值放在 st.subLocal（0 或沒設定就退回房間的 st.sub），排程和音軌都讀那個
+let mySub = 0;
+try { mySub = Number(localStorage.getItem('mmMySub')) || 0; } catch(e){}
+if (!SUB_LIST.includes(mySub)) mySub = 0;
+
 // 速度範圍。一拍永遠是 60÷BPM 秒，也永遠當成四分音符來看。
 // 以前有二分／附點四分／八分的單位切換，後來拿掉，改成直接把範圍放寬。
 const BPM_MIN = 15, BPM_MAX = 600;
@@ -2850,6 +2867,9 @@ const UI_ZH = {
   muteLabel:   (play, rest) => '每 ' + play + ' 小節靜音 ' + rest,
 
   // 耳機延遲
+  mySubTitle:  '我的細分',
+  mySubFollow: '跟著房間',
+  mySubHint:   '只改你自己聽到的細分，拍子還是跟大家一樣。',
   latTitle:    '我的耳機延遲',
   latAria:     '耳機延遲',
   latLess:     '延遲減 5 毫秒',
@@ -3090,6 +3110,9 @@ const UI_EN = {
   restMore:    'More silent bars',
   muteLabel:   (play, rest) => 'Play ' + play + ', silent ' + rest,
 
+  mySubTitle:  'My subdivision',
+  mySubFollow: 'Follow the room',
+  mySubHint:   'Changes only what you hear. Your beat stays in sync with everyone.',
   latTitle:    'My headphone delay',
   latAria:     'Headphone delay',
   latLess:     'Delay −5 ms',
@@ -3316,6 +3339,7 @@ let synced = false;
 let sock = null, wantCode = null, retry = 0;
 const st = {
   code:null, bpm:90, beats:4, accents:[1,0,0,0], sub:1,
+  subLocal:mySub,   // 我的細分（0 = 跟著房間）。只影響這支手機聽到的，不送給伺服器
   ramp:{ on:false, bars:4, step:2, target:160 },
   mute:{ on:false, play:3, rest:1 },
   count:{ on:false, bars:1, loop:false, phrase:4 },   // 預備拍（loop：每個樂句前都重新數）
@@ -3666,7 +3690,7 @@ function makeSchedule(){
   if (st.count && st.count.on) return makeCountSchedule();
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  const sub = st.sub;
+  const sub = st.subLocal || st.sub;
   const R = st.ramp || { on:false };
   const on = !!R.on && R.step > 0 && R.target > bpm0;
   const segBeats = Math.max(1, (R.bars || 4) * beats); // 一段有幾個主拍
@@ -3730,7 +3754,7 @@ function makeSchedule(){
 function makeCountSchedule(){
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  const sub = st.sub;
+  const sub = st.subLocal || st.sub;
   const perBar = beats * sub;
   const R = st.ramp || { on:false };
   const rampOn = !!R.on && R.step > 0 && R.target > bpm0;
@@ -3919,7 +3943,7 @@ let bgLastStart = 0;
 let holdUntil = 0;   // 這個時刻之前由背景音軌負責，節點排程不要重複發聲
 
 function trackSig(){
-  return [grid.bpm, st.beats, st.accents.join(''), st.sub,
+  return [grid.bpm, st.beats, st.accents.join(''), st.subLocal || st.sub,
           st.ramp.on ? [st.ramp.bars, st.ramp.step, st.ramp.target].join('/') : 'off',
           st.mute.on ? [st.mute.play, st.mute.rest].join('/') : 'off',
           st.count && st.count.on ? [st.count.bars, st.count.loop ? st.count.phrase : 'once'].join('/') : 'off'
@@ -4280,6 +4304,51 @@ function renderSubs(){
     b.setAttribute('aria-label', UI.subAria(n, subLabel(n)));
     b.classList.toggle('on', n === st.sub);
   }
+  renderMySub();
+}
+
+/* ---------- 我的細分 ----------
+   房間的速度、拍號、重音照舊同步，只有「一拍聽幾顆」可以自己決定。
+   因為主拍的時刻沒變，所以選幾等分都跟大家對得上。 */
+function renderMySub(){
+  const row = $('mySubRow');
+  if (!row.children.length){
+    const follow = document.createElement('button');
+    follow.className = 'subchip mysub-follow';
+    follow.dataset.n = 0;
+    follow.onclick = () => setMySub(0);
+    row.appendChild(follow);
+    for (const n of SUB_LIST){
+      const b = document.createElement('button');
+      b.className = 'subchip';
+      b.dataset.n = n;
+      b.onclick = () => setMySub(n);
+      row.appendChild(b);
+    }
+  }
+  for (const b of row.children){
+    const n = Number(b.dataset.n);
+    if (n === 0){
+      b.textContent = UI.mySubFollow;
+      b.title = UI.mySubFollow;
+      b.setAttribute('aria-label', UI.mySubFollow);
+    } else {
+      b.innerHTML = subNoteSvg(n);
+      b.title = subLabel(n);
+      b.setAttribute('aria-label', UI.subAria(n, subLabel(n)));
+    }
+    b.classList.toggle('on', n === mySub);
+  }
+  $('mySubLabel').textContent = mySub ? subLabel(mySub) : UI.mySubFollow;
+}
+
+function setMySub(n){
+  if (n === mySub) return;
+  mySub = n;
+  st.subLocal = n;
+  try { localStorage.setItem('mmMySub', n); } catch(e){}
+  renderMySub();
+  reschedule();          // 時刻不變，只是哪幾顆發聲變了，重排就好
 }
 
 /* ---------- 9. 曲目清單（存在自己的裝置裡） ---------- */
