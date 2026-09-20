@@ -1911,8 +1911,11 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 .leave-opts{display:flex;gap:.6rem}
 .leave-opts .btn{flex:1;height:2.8rem;font-size:.92rem}
 /* 我的細分：收起來是一行，點開是有音符圖的清單 */
+/* 外面包一層 div 來承接面板給子元素的左右邊距：按鈕自己寫 width:100% 再加邊距會撐出框外，
+   但按鈕是表單元件，寬度設 auto 又只會縮到文字寬度，所以讓外層負責對齊、裡面填滿 */
+.mysub-pick{margin-top:.6rem}
 .mysub-btn{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
-  margin-top:.6rem;padding:.5rem .7rem;border-radius:10px;
+  margin:0;padding:.5rem .7rem;border-radius:10px;
   border:1px solid var(--line) !important;background:var(--card-soft) !important;color:var(--navy) !important}
 .mysub-cur{display:flex;align-items:center;gap:.5rem;min-width:0;font-size:.88rem}
 .mysub-cur svg{height:1.5rem;width:auto;flex:0 0 auto}
@@ -2166,10 +2169,12 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
     <details>
       <summary><span data-i18n="mySubTitle">我的細分</span> <b id="mySubLabel" data-i18n="mySubFollow">跟著房間</b></summary>
       <!-- 點開才選：原生的下拉選單只能放文字，放不了音符圖，所以自己做一個 -->
-      <button class="mysub-btn" id="mySubBtn" aria-haspopup="dialog" aria-label="我的細分" data-i18n-aria="mySubTitle">
-        <span class="mysub-cur" id="mySubCur"></span>
-        <svg class="mysub-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
+      <div class="mysub-pick">
+        <button class="mysub-btn" id="mySubBtn" aria-haspopup="dialog" aria-label="我的細分" data-i18n-aria="mySubTitle">
+          <span class="mysub-cur" id="mySubCur"></span>
+          <svg class="mysub-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
       <p class="hint" data-i18n="mySubHint">只改你自己聽到的細分，拍子還是跟大家一樣。</p>
     </details>
 
