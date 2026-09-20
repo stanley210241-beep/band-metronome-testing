@@ -1910,9 +1910,23 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 .leave-card p{margin:0 0 1rem;font-size:.95rem;line-height:1.6;color:var(--navy)}
 .leave-opts{display:flex;gap:.6rem}
 .leave-opts .btn{flex:1;height:2.8rem;font-size:.92rem}
-/* 我的細分：8 顆按鈕一排塞不下，改成自動換行，不要用左右捲動（使用者不會發現右邊還有東西） */
-.mysub-row{flex-wrap:wrap;overflow:visible;row-gap:4px}
-.mysub-row .mysub-follow{flex:0 0 auto;min-width:0;padding:.5rem .6rem;white-space:nowrap}
+/* 我的細分：收起來是一行，點開是有音符圖的清單 */
+.mysub-btn{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
+  margin-top:.6rem;padding:.5rem .7rem;border-radius:10px;
+  border:1px solid var(--line) !important;background:var(--card-soft) !important;color:var(--navy) !important}
+.mysub-cur{display:flex;align-items:center;gap:.5rem;min-width:0;font-size:.88rem}
+.mysub-cur svg{height:1.5rem;width:auto;flex:0 0 auto}
+.mysub-caret{width:1rem;height:1rem;flex:0 0 auto;opacity:.7}
+.mysub-sheet{max-width:20rem;padding-top:1.2rem}
+.mysub-sheet .fb-title{display:block;margin:0 0 .8rem;text-align:center}
+.mysub-list{display:flex;flex-direction:column;gap:.35rem;max-height:60vh;overflow:auto}
+.mysub-opt{display:flex;align-items:center;gap:.7rem;width:100%;padding:.5rem .7rem;border-radius:12px;
+  border:1px solid var(--line) !important;background:var(--card-soft) !important;color:var(--navy) !important;
+  font-size:.9rem;text-align:left}
+.mysub-opt .mysub-note{display:flex;align-items:center;justify-content:center;width:2.4rem;flex:0 0 auto}
+.mysub-opt .mysub-note svg{height:1.6rem;width:auto}
+.mysub-opt.on{border-color:var(--brass) !important;background:color-mix(in srgb,var(--brass) 12%,transparent) !important;
+  color:var(--brass) !important;font-weight:650}
 </style>
 </head>
 <body>
@@ -2151,7 +2165,11 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
          所以跟大家還是對齊的：貝斯手可以只聽主拍，鼓手可以聽十六分 -->
     <details>
       <summary><span data-i18n="mySubTitle">我的細分</span> <b id="mySubLabel" data-i18n="mySubFollow">跟著房間</b></summary>
-      <div class="chips mysub-row" id="mySubRow"></div>
+      <!-- 點開才選：原生的下拉選單只能放文字，放不了音符圖，所以自己做一個 -->
+      <button class="mysub-btn" id="mySubBtn" aria-haspopup="dialog" aria-label="我的細分" data-i18n-aria="mySubTitle">
+        <span class="mysub-cur" id="mySubCur"></span>
+        <svg class="mysub-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       <p class="hint" data-i18n="mySubHint">只改你自己聽到的細分，拍子還是跟大家一樣。</p>
     </details>
 
@@ -2393,6 +2411,15 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
           <li data-i18n="howTip5">房主換了耳機的話，其他人要重新對一次。</li>
         </ul>
       </div>
+    </div>
+  </div>
+
+  <!-- 我的細分：點「我的細分」那一行會打開，每個選項都有音符圖 -->
+  <div id="mySubSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="mySubSheetTitle" hidden>
+    <div class="sheet-card mysub-sheet">
+      <button class="sheet-close" id="mySubClose" aria-label="關閉" data-i18n-aria="close">×</button>
+      <h2 class="fb-title" id="mySubSheetTitle" data-i18n="mySubTitle">我的細分</h2>
+      <div class="mysub-list" id="mySubList"></div>
     </div>
   </div>
 
@@ -2869,6 +2896,7 @@ const UI_ZH = {
   // 耳機延遲
   mySubTitle:  '我的細分',
   mySubFollow: '跟著房間',
+  mySubPer:    (name, n) => name + (n === 1 ? '（只有主拍）' : '（一拍 ' + n + ' 下）'),
   mySubHint:   '只改你自己聽到的細分，拍子還是跟大家一樣。',
   latTitle:    '我的耳機延遲',
   latAria:     '耳機延遲',
@@ -3112,6 +3140,7 @@ const UI_EN = {
 
   mySubTitle:  'My subdivision',
   mySubFollow: 'Follow the room',
+  mySubPer:    (name, n) => name + (n === 1 ? ' (beat only)' : ' (' + n + ' per beat)'),
   mySubHint:   'Changes only what you hear. Your beat stays in sync with everyone.',
   latTitle:    'My headphone delay',
   latAria:     'Headphone delay',
@@ -4310,37 +4339,38 @@ function renderSubs(){
 /* ---------- 我的細分 ----------
    房間的速度、拍號、重音照舊同步，只有「一拍聽幾顆」可以自己決定。
    因為主拍的時刻沒變，所以選幾等分都跟大家對得上。 */
+// 點開才選：一整排八顆按鈕太佔版面，但原生的下拉選單只能放文字、放不了音符圖，
+// 所以自己做一個——平常收成一行，點了跳出清單，每一列都有音符圖加文字
+function mySubText(n){
+  return n ? UI.mySubPer(subLabel(n), n) : UI.mySubFollow;
+}
 function renderMySub(){
-  const row = $('mySubRow');
-  if (!row.children.length){
-    const follow = document.createElement('button');
-    follow.className = 'subchip mysub-follow';
-    follow.dataset.n = 0;
-    follow.onclick = () => setMySub(0);
-    row.appendChild(follow);
-    for (const n of SUB_LIST){
+  const list = $('mySubList');
+  if (!list.children.length){
+    for (const n of [0, ...SUB_LIST]){
       const b = document.createElement('button');
-      b.className = 'subchip';
+      b.className = 'mysub-opt';
       b.dataset.n = n;
-      b.onclick = () => setMySub(n);
-      row.appendChild(b);
+      b.innerHTML = '<span class="mysub-note"></span><span class="mysub-name"></span>';
+      b.onclick = () => { setMySub(n); closeSheet('mySubSheet'); };
+      list.appendChild(b);
     }
   }
-  for (const b of row.children){
+  // 「跟著房間」那一列畫房間目前的音符，順便告訴你現在房間是幾等分
+  for (const b of list.children){
     const n = Number(b.dataset.n);
-    if (n === 0){
-      b.textContent = UI.mySubFollow;
-      b.title = UI.mySubFollow;
-      b.setAttribute('aria-label', UI.mySubFollow);
-    } else {
-      b.innerHTML = subNoteSvg(n);
-      b.title = subLabel(n);
-      b.setAttribute('aria-label', UI.subAria(n, subLabel(n)));
-    }
+    b.querySelector('.mysub-note').innerHTML = subNoteSvg(n || st.sub);
+    b.querySelector('.mysub-name').textContent = n ? mySubText(n)
+      : UI.mySubFollow + '（' + subLabel(st.sub) + '）';
     b.classList.toggle('on', n === mySub);
   }
+  $('mySubCur').innerHTML = subNoteSvg(mySub || st.sub) +
+    '<span>' + (mySub ? mySubText(mySub) : UI.mySubFollow) + '</span>';
   $('mySubLabel').textContent = mySub ? subLabel(mySub) : UI.mySubFollow;
 }
+
+$('mySubBtn').onclick = () => openSheet('mySubSheet');
+$('mySubClose').onclick = () => closeSheet('mySubSheet');
 
 function setMySub(n){
   if (n === mySub) return;
@@ -5876,13 +5906,14 @@ function closeSheet(id){
   s.classList.remove('show');
   setTimeout(() => { s.hidden = true; }, 180);
 }
-for (const id of ['fbSheet', 'qrSheet', 'helpSheet', 'leaveSheet']){
+for (const id of ['fbSheet', 'qrSheet', 'helpSheet', 'leaveSheet', 'mySubSheet']){
   $(id).addEventListener('click', e => { if (e.target.id === id) closeSheet(id); });   // 點外面關掉
 }
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('qrSheet').hidden) closeSheet('qrSheet');
   if (!$('helpSheet').hidden) closeSheet('helpSheet');
+  if (!$('mySubSheet').hidden) closeSheet('mySubSheet');
   if (!$('leaveSheet').hidden) $('leaveNo').click();     // 按 Esc 等於選「留下」
   if (!$('fbSheet').hidden) $('fbClose').click();
 });
