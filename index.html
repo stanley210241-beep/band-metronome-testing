@@ -3988,6 +3988,7 @@ function pump(ahead, maxEvents){
 let bgSource = null;
 let bgBuf = null, bgSig = '';   // 算好的音訊重複使用，只有設定變了才重算
 let bgAnchor = null;            // 啟動這段音軌時用的基準點
+let bgLate = 0;                 // 上次排進去時已經遲了多少秒（0 = 準時）
 let bgLastStart = 0;
 let holdUntil = 0;   // 這個時刻之前由背景音軌負責，節點排程不要重複發聲
 
@@ -4001,6 +4002,7 @@ function trackSig(){
 
 function stopBgTrack(at){
   bgAnchor = null;
+  bgLate = 0;
   if (!bgSource) return;
   try { bgSource.stop(at === undefined ? 0 : at); } catch(e){}
   const s = bgSource;
@@ -4018,36 +4020,49 @@ function startBgTrack(when){
     });
     return;
   }
-  stopBgTrack();
   if (!sched) sched = makeSchedule();
 
-  // renderSpan 要把一整段音訊算出來，手機上可能花掉幾十到上百毫秒。
+  // 舊的先留著，等新的接上再收。這樣提前量可以放得很寬也不會有空白，
+  // 螢幕全黑時主執行緒被壓得很慢，提前量不夠就會來不及、整段慢掉
+  const old = bgSource;
+  bgSource = null;
+
+  // renderSpan 要把一整段音訊算出來，螢幕關掉時主執行緒被降頻，可能花掉好幾百毫秒。
   // 所以「什麼時候開始播」一定要等算完再決定——先決定的話，等算完那一刻早就過去了，
   // start() 只能立刻播，整段就慢掉算音訊的那段時間（速度對、拍子歪，就是這樣來的）。
   const loop = sched.periodic;
   const anchorPre = anchor === null ? whereIsBeatZero() : anchor;
   const relPre = Math.max(when, anchorPre) - anchorPre;
+  const t0 = Date.now();
 
-  if (loop){
-    // 沒開漸快時整段是週期性的：算幾個週期（至少 8 秒）然後無限循環。
-    // 週期從 periodFrom 開始（只預備一次時，預備拍之後才開始重複）。
-    // 記憶體固定，離開再久都不會停。
-    // 只是要調相位的話直接沿用同一段音訊，不必重算。
-    const sig = trackSig();
-    if (sig !== bgSig || !bgBuf){
-      const reps = Math.max(1, Math.ceil(8 / sched.periodLen));
-      bgBuf = renderSpan(sched.periodFrom, reps * sched.periodLen, true);
-      bgSig = sig;
+  try {
+    if (loop){
+      // 沒開漸快時整段是週期性的：算幾個週期（至少 8 秒）然後無限循環。
+      // 週期從 periodFrom 開始（只預備一次時，預備拍之後才開始重複）。
+      // 記憶體固定，離開再久都不會停。
+      // 只是要調相位的話直接沿用同一段音訊，不必重算。
+      const sig = trackSig();
+      if (sig !== bgSig || !bgBuf){
+        const reps = Math.max(1, Math.ceil(8 / sched.periodLen));
+        bgBuf = renderSpan(sched.periodFrom, reps * sched.periodLen, true);
+        bgSig = sig;
+      }
+    } else {
+      // 漸快中速度一直變，而且起點不同內容就不同，每次都要重算
+      bgBuf = renderSpan(relPre, 45, false);
+      bgSig = '';
     }
-  } else {
-    // 漸快中速度一直變，而且起點不同內容就不同，每次都要重算
-    bgBuf = renderSpan(relPre, 45, false);
-    bgSig = '';
+  } catch(e){
+    // 算不出來的話，舊的要馬上收掉：它是循環播放的，沒人喊停會一直響下去
+    try { if (old) old.stop(0); } catch(e2){}
+    return;
   }
 
-  // 算完了，現在才看時鐘。基準點重抓一次，開始時刻至少要留 60 毫秒在未來
+  // 算完了，現在才看時鐘。提前量看剛剛算得多慢：這次慢，接下來幾行大概也慢，
+  // 留兩倍的餘裕（最少 0.12 秒、最多 1 秒）。反正舊的音軌會撐到新的接手，不會有空白
   anchor = whereIsBeatZero();
-  const begin = Math.max(ctx.currentTime + 0.06, anchor);
+  const lead = Math.min(1, Math.max(0.12, (Date.now() - t0) / 1000 * 2));
+  const begin = Math.max(ctx.currentTime + lead, anchor);
   const rel = begin - anchor;
 
   const src = ctx.createBufferSource();
@@ -4070,6 +4085,17 @@ function startBgTrack(when){
   bgSource = src;
   bgAnchor = anchor;
   bgLastStart = Date.now();
+
+  // 舊的撐到新的接手為止，中間不留空白
+  if (old){
+    try { old.stop(begin); } catch(e){}
+    setTimeout(() => { try { old.disconnect(); } catch(e){} }, 1200);
+  }
+
+  // 真的排進去之後再看一次時鐘。如果排的時候 begin 就已經過去了
+  // （例如中間被系統插隊暫停），這段就是從過去開始播的，會整段慢掉那麼多。
+  // 光比基準點看不出來，所以記下來，下次醒著的時候重排
+  bgLate = Math.max(0, ctx.currentTime - begin);
 }
 
 // 背景時的核對動作。
@@ -4080,9 +4106,11 @@ function startBgTrack(when){
 function keepBgInPhase(){
   if (!bgSource || !ctx || !st.running || !synced) return;
   if (ctx.state !== 'running' || bgAnchor === null) return;
-  if (Date.now() - bgLastStart < 1500) return;      // 剛重開過，先讓它穩一下
+  if (Date.now() - bgLastStart < 700) return;       // 剛重開過，先讓它穩一下
   const want = whereIsBeatZero();
-  if (Math.abs(want - bgAnchor) < 0.025) return;    // 還在誤差內
+  // bgLate：上次真的排進去時已經遲了多少。基準點本身是時間不變的，
+  // 光比基準點看不出「整段從過去開始播」這種遲到，所以要另外記
+  if (Math.abs(want - bgAnchor) < 0.025 && bgLate < 0.01) return;
   anchor = want;
   startBgTrack(ctx.currentTime + 0.08);
 }
