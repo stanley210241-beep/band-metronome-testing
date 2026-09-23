@@ -4018,12 +4018,13 @@ function startBgTrack(when){
   }
   stopBgTrack();
   if (!sched) sched = makeSchedule();
-  if (anchor === null) anchor = whereIsBeatZero();
 
-  const begin = Math.max(when, anchor);      // 還沒到第一拍的話就等到第一拍
-  const rel = begin - anchor;
-
+  // renderSpan 要把一整段音訊算出來，手機上可能花掉幾十到上百毫秒。
+  // 所以「什麼時候開始播」一定要等算完再決定——先決定的話，等算完那一刻早就過去了，
+  // start() 只能立刻播，整段就慢掉算音訊的那段時間（速度對、拍子歪，就是這樣來的）。
   const loop = sched.periodic;
+  const anchorPre = anchor === null ? whereIsBeatZero() : anchor;
+  const relPre = Math.max(when, anchorPre) - anchorPre;
 
   if (loop){
     // 沒開漸快時整段是週期性的：算幾個週期（至少 8 秒）然後無限循環。
@@ -4038,9 +4039,14 @@ function startBgTrack(when){
     }
   } else {
     // 漸快中速度一直變，而且起點不同內容就不同，每次都要重算
-    bgBuf = renderSpan(rel, 45, false);
+    bgBuf = renderSpan(relPre, 45, false);
     bgSig = '';
   }
+
+  // 算完了，現在才看時鐘。基準點重抓一次，開始時刻至少要留 60 毫秒在未來
+  anchor = whereIsBeatZero();
+  const begin = Math.max(ctx.currentTime + 0.06, anchor);
+  const rel = begin - anchor;
 
   const src = ctx.createBufferSource();
   src.buffer = bgBuf;
@@ -4054,7 +4060,10 @@ function startBgTrack(when){
     if (rel < from) src.start(anchor + from, 0);
     else src.start(begin, (((rel - from) % d) + d) % d);
   } else {
-    src.start(begin, 0);
+    // 這段音訊是從 relPre 開始算的，rel 跟它的差就是剛剛算音訊花掉的時間，
+    // 直接從音訊裡那個位置切進去，聽起來才會接在對的拍點上
+    const off = Math.min(Math.max(rel - relPre, 0), Math.max(bgBuf.duration - 0.05, 0));
+    src.start(begin, off);
   }
   bgSource = src;
   bgAnchor = anchor;
@@ -4129,6 +4138,36 @@ let rebuilds = 0, lastRebuild = 0;
 // 反覆被中斷之後，AudioContext 會進入一種「自稱還活著、實際上已經死掉」的狀態：
 // state 回報 running，送進去的聲音卻不會出來，resume() 也救不回來。
 // 這種時候唯一的辦法是整個丟掉重建。
+
+// 「重置音訊」優先走這條：不換 AudioContext，只把聲音停掉重排一次。
+// 換 AudioContext 會讓 iOS 重新挑一次藍牙線路，只戴單邊耳機時常常挑到
+// 通話通道（變超級小聲、甚至沒聲音），所以能不換就不換。
+// 真的是「死掉的 AudioContext」才救不回來，那時候再走 rebuildAudio
+async function softResetAudio(){
+  if (!ctx) return false;
+  setPlaybackSession();
+  stopBgTrack();
+  flush();
+  try { await ctx.resume(); } catch(e){}
+  if (ctx.state !== 'running') return false;
+
+  // 死掉的 AudioContext 會說自己 running，currentTime 卻不動。看 250 毫秒就知道
+  const t0 = ctx.currentTime;
+  await new Promise(r => setTimeout(r, 250));
+  if (ctx.currentTime - t0 < 0.05) return false;
+
+  anchor = null;
+  clockSeen = null; stallStrikes = 0;
+  bgSig = '';                 // 音訊重算一份，不要沿用舊的
+  if (st.running){
+    if (document.hidden) startBgTrack(ctx.currentTime + 0.12);
+    else pump(LOOKAHEAD, 120);
+  }
+  checkAudio();
+  paintAudioInfo();
+  return true;
+}
+
 async function rebuildAudio(force){
   const now = Date.now();
   if (!force && now - lastRebuild < 3000) return;
@@ -4149,9 +4188,10 @@ async function rebuildAudio(force){
   WAVES = null; bgBuf = null; bgSig = '';
   clockSeen = null; stallStrikes = 0; resumeFails = 0;
 
-  // 順序是「先蓋新的、再拆舊的」，不要留空窗
-  try { await ensureAudio(); } catch(e){}
+  // 順序回到「先拆舊的、再蓋新的」：兩個音訊引擎同時活著，iOS 會在兩者之間
+  // 重挑線路，反而更容易整個沒聲音。空窗期由上面那段近無聲的音檔擋著
   try { if (old) await old.close(); } catch(e){}
+  try { await ensureAudio(); } catch(e){}
   setPlaybackSession();
   releaseRoute(heldRoute);
   anchor = null;
@@ -4227,7 +4267,10 @@ async function tryResume(force){
 }
 
 $('resumeBar').onclick = () => tryResume(true);
-$('resetAudio').onclick = () => rebuildAudio(true);
+$('resetAudio').onclick = async () => {
+  if (await softResetAudio()){ toast(LINES.rebuilt); return; }
+  rebuildAudio(true);
+};
 
 // 把音訊目前的狀況攤開來，遇到問題時看得到發生什麼事
 function paintAudioInfo(){
