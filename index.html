@@ -2903,6 +2903,9 @@ const UI_ZH = {
   mySubFollow: '跟著房間',
   mySubPer:    (name, n) => name + (n === 1 ? '（只有主拍）' : '（一拍 ' + n + ' 下）'),
   mySubHint:   '只改你自己聽到的細分，拍子還是跟大家一樣。',
+  // 鎖屏／控制中心顯示的字
+  mediaTitle:  '同步節拍器',
+  mediaRoom:   (code, bpm) => '房號 ' + code + ' · ' + bpm + ' BPM',
   latTitle:    '我的耳機延遲',
   latAria:     '耳機延遲',
   latLess:     '延遲減 5 毫秒',
@@ -3147,6 +3150,8 @@ const UI_EN = {
   mySubFollow: 'Follow the room',
   mySubPer:    (name, n) => name + (n === 1 ? ' (beat only)' : ' (' + n + ' per beat)'),
   mySubHint:   'Changes only what you hear. Your beat stays in sync with everyone.',
+  mediaTitle:  'Sync Metronome',
+  mediaRoom:   (code, bpm) => 'Room ' + code + ' · ' + bpm + ' BPM',
   latTitle:    'My headphone delay',
   latAria:     'Headphone delay',
   latLess:     'Delay −5 ms',
@@ -3527,6 +3532,7 @@ async function ensureAudio(){
     loadCountSample();
   }
   if (ctx.state !== 'running') await ctx.resume();
+  blessMediaEl();   // 趁著這次的使用者動作，先讓鎖屏用的音檔拿到播放許可
 }
 
 // 把嵌在網頁裡的預備拍錄音解碼成這台裝置的取樣率。
@@ -5283,6 +5289,7 @@ function onState(m){
   }
   $('play').textContent = m.running ? UI.stop : UI.start;
   $('play').classList.toggle('on', m.running);
+  syncMedia();      // 鎖屏／控制中心的播放鍵跟著房間走
 
   renderBeats();
   renderSubs();
@@ -5982,6 +5989,7 @@ function backToGate(){
   history.replaceState(null, '', location.pathname);
   screenTarget = 'gate';
   swapScreen('gate', 'back');
+  syncMedia();      // 離開房間就把鎖屏上的播放鍵收掉
 }
 
 $('leaveBtn').title = UI.leave;     // 滑鼠移上去時的提示
@@ -6027,6 +6035,94 @@ window.addEventListener('popstate', () => {
   if (leaveNeedsAsk()){ pushRoomState(); askLeave(doLeave); return; }
   doLeave();
 });
+
+/* ---------- 鎖屏／控制中心的播放鍵 ----------
+   聲音是用 Web Audio 直接算出來的，沒有播放器元素，所以 iPhone 的鎖屏和控制中心
+   雖然因為 audioSession = 'playback' 長出一個播放鍵，按了卻沒人接。
+   解法兩步：掛一段幾乎無聲的循環音檔當「門面」，讓系統認得這個網頁在播東西；
+   再用 Media Session 把那顆鍵導回我們的開始／停止。按暫停＝整個房間一起停。 */
+
+// 幾乎無聲的 1 秒音檔。真的全部填 0 的話，有些系統會當成沒在播而不給控制權，
+// 所以留最小的一格振幅（聽不到）。現算現產，不用把一長串 base64 塞進檔案裡
+function quietWavUrl(){
+  const rate = 8000, n = rate, bytes = 44 + n * 2;
+  const buf = new ArrayBuffer(bytes), v = new DataView(buf);
+  const str = (off, s) => { for (let i = 0; i < s.length; i++) v.setUint8(off + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, bytes - 8, true); str(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true);
+  v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, i % 2 ? 1 : -1, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+
+let mediaEl = null;
+
+function ensureMediaEl(){
+  if (mediaEl) return mediaEl;
+  mediaEl = document.createElement('audio');
+  mediaEl.loop = true;
+  mediaEl.playsInline = true;
+  mediaEl.preload = 'auto';
+  mediaEl.src = quietWavUrl();
+  mediaEl.style.display = 'none';
+  document.body.appendChild(mediaEl);
+  // 耳機線控、別的 App 搶走聲音時，系統會直接暫停這個元素，沒有經過 Media Session。
+  // 那也算使用者要停；我們自己收掉時 st.running 已經是 false，不會再觸發一次
+  mediaEl.addEventListener('pause', () => { if (st.running) mediaStop(); });
+  return mediaEl;
+}
+
+// 第一次的使用者動作裡先播一下再收起來：之後別人按開始時，就不用再等一次手勢
+function blessMediaEl(){
+  try {
+    const el = ensureMediaEl();
+    if (!el.paused) return;
+    const p = el.play();
+    if (p && p.then) p.then(() => { if (!st.running) el.pause(); }).catch(() => {});
+  } catch(e){}
+}
+
+function mediaPlay(){
+  if (!canControl()) return syncMedia();   // 沒有控制權就把狀態改回去，鎖屏才不會顯示錯的
+  ensureAudio(); keepAwake();
+  send({ t:'start' });
+}
+function mediaStop(){
+  if (!canControl()) return syncMedia();
+  send({ t:'stop' });
+}
+
+// 房間的播放狀態一變就跟著改：音檔跟著開關，鎖屏上的字也換成現在的房號和速度
+function syncMedia(){
+  const on = !!st.running;
+  if (on || mediaEl){
+    const el = ensureMediaEl();
+    if (on && el.paused){ const p = el.play(); if (p && p.catch) p.catch(() => {}); }
+    if (!on && !el.paused) el.pause();
+  }
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.playbackState = on ? 'playing' : 'paused';
+    const meta = {
+      title:  UI.mediaTitle,
+      artist: st.code ? UI.mediaRoom(st.code, grid.bpm || st.bpm) : '',
+    };
+    // 圖示只在正常網址下帶：解析不出網址的話，MediaMetadata 會整包拒收，連標題都沒了
+    if (/^https?:/.test(location.protocol)){
+      meta.artwork = [{ src: new URL('/icon.png', location.href).href, sizes: '512x512', type: 'image/png' }];
+    }
+    navigator.mediaSession.metadata = new MediaMetadata(meta);
+  } catch(e){}
+}
+
+if ('mediaSession' in navigator){
+  const setMediaKey = (k, fn) => { try { navigator.mediaSession.setActionHandler(k, fn); } catch(e){} };
+  setMediaKey('play',  mediaPlay);
+  setMediaKey('pause', mediaStop);
+  setMediaKey('stop',  mediaStop);
+}
 
 /* ---------- 13. 螢幕不要睡著 ---------- */
 
