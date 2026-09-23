@@ -6221,17 +6221,39 @@ function mediaNudge(d){
   syncMedia();      // 鎖屏上的速度也跟著換
 }
 
+// 鎖屏按鍵每次開始播放都要重新掛一次。
+// 網頁載入時掛的那一輪，iOS 的 Now Playing 工作階段還不存在，
+// 上一首／下一首這種「非基本款」的按鍵會被忽略（播放暫停一定有）。
+// 等音檔真的開始播、工作階段建立起來之後再掛一次，它才認得。
+// 重新整理時之所以會好，就是因為舊的工作階段還沒消失
+function bindMediaKeys(){
+  if (!('mediaSession' in navigator)) return;
+  const set = (k, fn) => { try { navigator.mediaSession.setActionHandler(k, fn); } catch(e){} };
+  set('play',  mediaPlay);
+  set('pause', mediaStop);
+  set('stop',  mediaStop);
+  set('nexttrack',     () => mediaNudge(1));
+  set('previoustrack', () => mediaNudge(-1));
+}
+bindMediaKeys();
+
 // 房間的播放狀態一變就跟著改：音檔跟著開關，鎖屏上的字也換成現在的房號和速度
 function syncMedia(){
   const on = !!st.running;
   if (on || mediaEl){
     const el = ensureMediaEl();
-    if (on && el.paused){ const p = el.play(); if (p && p.catch) p.catch(() => {}); }
+    if (on && el.paused){
+      const p = el.play();
+      // 真的播起來了才重新掛按鍵：這時候工作階段才存在
+      if (p && p.then) p.then(bindMediaKeys).catch(() => {});
+      else bindMediaKeys();
+    }
     if (!on && !el.paused) el.pause();
   }
   if (!('mediaSession' in navigator)) return;
   try {
     navigator.mediaSession.playbackState = on ? 'playing' : 'paused';
+    if (on) bindMediaKeys();
     const meta = {
       title:  UI.mediaTitle,
       artist: st.code ? UI.mediaRoom(st.code, nudgeBpm === null ? (grid.bpm || st.bpm) : nudgeBpm) : '',
@@ -6244,14 +6266,6 @@ function syncMedia(){
   } catch(e){}
 }
 
-if ('mediaSession' in navigator){
-  const setMediaKey = (k, fn) => { try { navigator.mediaSession.setActionHandler(k, fn); } catch(e){} };
-  setMediaKey('play',  mediaPlay);
-  setMediaKey('pause', mediaStop);
-  setMediaKey('stop',  mediaStop);
-  setMediaKey('nexttrack',     () => mediaNudge(1));
-  setMediaKey('previoustrack', () => mediaNudge(-1));
-}
 
 /* ---------- 13. 螢幕不要睡著 ---------- */
 
