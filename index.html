@@ -3498,11 +3498,17 @@ const VOICES = {
 const OUT_GAIN = 0.85 * 1.15;
 const outGain = () => muted ? 0 : OUT_GAIN;
 
+// iOS：告訴系統這是「播放」用途。只有 playback 會走藍牙的音樂通道（A2DP）；
+// 一旦系統覺得這個網頁可能要錄音，就會改走通話通道——聲音還在，但變單聲道，
+// 而且吃的是通話音量，聽起來會超級小聲。只戴單邊耳機時特別容易被挑到通話通道
+function setPlaybackSession(){
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+}
+
 async function ensureAudio(){
   if (!ctx){
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    // iOS：告訴系統這是播放用途，靜音鍵比較不會把聲音切掉
-    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
+    setPlaybackSession();
 
     // 限幅器：把超出上限的峰值壓住。有了它才能把整體音量推大而不破音。
     limiter = ctx.createDynamicsCompressor();
@@ -3532,6 +3538,7 @@ async function ensureAudio(){
     loadCountSample();
   }
   if (ctx.state !== 'running') await ctx.resume();
+  anchor = null;    // 剛醒來的音訊時鐘跟之前不連續，下一次排程要重新對一次
   blessMediaEl();   // 趁著這次的使用者動作，先讓鎖屏用的音檔拿到播放許可
 }
 
@@ -4001,6 +4008,14 @@ function stopBgTrack(at){
 
 function startBgTrack(when){
   if (!ctx || !st.running || !synced) return;
+  // 音訊還沒醒就別排：鎖屏時 ctx.currentTime 是凍住的，
+  // 拿它算出來的位置會落在過去，等它醒來就整段慢半拍。先叫醒，醒了再重新對一次
+  if (ctx.state !== 'running'){
+    tryResume(true).then(() => {
+      if (ctx.state === 'running' && st.running){ anchor = null; startBgTrack(ctx.currentTime + 0.12); }
+    });
+    return;
+  }
   stopBgTrack();
   if (!sched) sched = makeSchedule();
   if (anchor === null) anchor = whereIsBeatZero();
@@ -4124,13 +4139,21 @@ async function rebuildAudio(force){
   stopBgTrack();
   flush();
 
+  // 先把線路釘住再動刀。中間只要有一瞬間完全沒有音訊在跑，iOS 就會重新挑一次
+  // 藍牙線路，只戴單邊耳機時常常會挑到通話通道（聲音還在，但變得超級小聲）。
+  // 那段近無聲的音檔在這裡剛好派上用場：讓它先播著，佔住音樂通道
+  setPlaybackSession();
+  const heldRoute = holdRoute();
+
   ctx = null; master = null; limiter = null; noiseBuf = null;
   WAVES = null; bgBuf = null; bgSig = '';
   clockSeen = null; stallStrikes = 0; resumeFails = 0;
 
-  try { if (old) await old.close(); } catch(e){}
+  // 順序是「先蓋新的、再拆舊的」，不要留空窗
   try { await ensureAudio(); } catch(e){}
-
+  try { if (old) await old.close(); } catch(e){}
+  setPlaybackSession();
+  releaseRoute(heldRoute);
   anchor = null;
   checkAudio();
   paintAudioInfo();
@@ -6074,6 +6097,21 @@ function ensureMediaEl(){
   return mediaEl;
 }
 
+
+// 重建音訊時借來佔住藍牙線路用。本來就在播就不要動它，是我們臨時開的才收回去
+function holdRoute(){
+  try {
+    const el = ensureMediaEl();
+    if (!el.paused) return false;
+    const p = el.play();
+    if (p && p.catch) p.catch(() => {});
+    return true;
+  } catch(e){ return false; }
+}
+function releaseRoute(mine){
+  if (mine && mediaEl && !st.running){ try { mediaEl.pause(); } catch(e){} }
+}
+
 // 第一次的使用者動作裡先播一下再收起來：之後別人按開始時，就不用再等一次手勢
 function blessMediaEl(){
   try {
@@ -6084,14 +6122,30 @@ function blessMediaEl(){
   } catch(e){}
 }
 
-function mediaPlay(){
+async function mediaPlay(){
   if (!canControl()) return syncMedia();   // 沒有控制權就把狀態改回去，鎖屏才不會顯示錯的
-  ensureAudio(); keepAwake();
+  await ensureAudio();   // 一定要等音訊真的醒過來再送「開始」，不然房間的起拍時刻會定在這支手機還沒準備好的時候
+  keepAwake();
   send({ t:'start' });
 }
 function mediaStop(){
   if (!canControl()) return syncMedia();
   send({ t:'stop' });
+}
+
+
+// 鎖屏上的上一首／下一首借來當 ±1 BPM。
+// 連按好幾下時伺服器還沒回話，st.bpm 還是舊的，所以自己記著剛按到哪，
+// 不然按五下只會加一。停手 0.8 秒就把它忘掉，回去跟房間的數字對齊
+let nudgeBpm = null, nudgeTimer = null;
+function mediaNudge(d){
+  if (!canControl()) return;
+  const base = nudgeBpm === null ? st.bpm : nudgeBpm;
+  nudgeBpm = clamp(base + d, BPM_MIN, BPM_MAX);
+  setBpm(nudgeBpm, 120);
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => { nudgeBpm = null; }, 800);
+  syncMedia();      // 鎖屏上的速度也跟著換
 }
 
 // 房間的播放狀態一變就跟著改：音檔跟著開關，鎖屏上的字也換成現在的房號和速度
@@ -6107,7 +6161,7 @@ function syncMedia(){
     navigator.mediaSession.playbackState = on ? 'playing' : 'paused';
     const meta = {
       title:  UI.mediaTitle,
-      artist: st.code ? UI.mediaRoom(st.code, grid.bpm || st.bpm) : '',
+      artist: st.code ? UI.mediaRoom(st.code, nudgeBpm === null ? (grid.bpm || st.bpm) : nudgeBpm) : '',
     };
     // 圖示只在正常網址下帶：解析不出網址的話，MediaMetadata 會整包拒收，連標題都沒了
     if (/^https?:/.test(location.protocol)){
@@ -6122,6 +6176,8 @@ if ('mediaSession' in navigator){
   setMediaKey('play',  mediaPlay);
   setMediaKey('pause', mediaStop);
   setMediaKey('stop',  mediaStop);
+  setMediaKey('nexttrack',     () => mediaNudge(1));
+  setMediaKey('previoustrack', () => mediaNudge(-1));
 }
 
 /* ---------- 13. 螢幕不要睡著 ---------- */
