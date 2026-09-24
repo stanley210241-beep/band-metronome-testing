@@ -21,7 +21,8 @@ const PAGE = path.join(__dirname, 'index.html');
 const LEAD_MS = 450;
 
 const MAX_BEATS = 12;
-const SUBS = [1, 2, 3, 4, 5, 6, 7];
+// 8 是 Swing 的代號（三連音的格子、中間那顆不響），不是「一拍 8 下」
+const SUBS = [1, 2, 3, 4, 5, 6, 7, 8];
 
 // 速度範圍。一拍永遠是 60÷BPM 秒，不分拍子單位——
 // 以前有二分／附點四分／八分的單位切換，後來拿掉，改成直接把範圍放寬。

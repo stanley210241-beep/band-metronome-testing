@@ -2656,7 +2656,12 @@ function needsServerSetup(){
   return !/^https?:\/\//.test(base) || /^file:/.test(base);
 }
 
-const SUB_LIST = [1, 2, 3, 4, 5, 6, 7];
+const SUB_LIST = [1, 2, 3, 4, 5, 6, 7, 8];
+// 最後那個 8 是 Swing（shuffle）的代號，不是「一拍 8 下」：
+// 用三連音的格子，每拍只響第 1、3 顆，中間那顆不響。
+// 拍點時刻跟三連音完全一樣，所以不會斷拍、也不會跟別人跑掉。
+// SWING 要寫在 SUB_LIST 下面：測試是從 SUB_LIST 這一行開始切的，寫在上面會被切掉
+const SWING = 8;
 
 // 我的細分：0 = 跟著房間。只換這支手機聽到的細分，主拍時刻不變，所以不會跟別人跑掉。
 // 實際用的值放在 st.subLocal（0 或沒設定就退回房間的 st.sub），排程和音軌都讀那個
@@ -2678,6 +2683,7 @@ function durName(len){
 // 一拍（四分音符）切成 k 等分之後，那一格是什麼音符。
 // 切不出標準音符長度的（三等分、五等分…）就叫幾連音。
 function subLabel(k){
+  if (k === SWING) return UI.swing;
   const { len, tuplet } = subNotation(k);
   return tuplet ? UI.tuplet(k) : durName(len);
 }
@@ -2697,6 +2703,7 @@ function subNotation(k){
 const BEAMS = { 1:0, 0.5:1, 0.25:2 };
 
 function subNoteSvg(k){
+  if (k === SWING) return swingNoteSvg();
   const { len, tuplet } = subNotation(k);
   const beams = BEAMS[len];
   const HEAD_Y = 25, STEM_TOP = 5;
@@ -2723,6 +2730,21 @@ function subNoteSvg(k){
     out += '<text x="' + mid + '" y="36.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="currentColor">' + tuplet + '</text>';
   }
   return '<svg class="subnote" viewBox="0 0 ' + w.toFixed(1) + ' 38" aria-hidden="true">' + out + '</svg>';
+}
+
+// Swing 的圖示：一個帶旗子的八分音符，下面寫 swing。
+// 符頭、符桿的位置跟其他細分按鈕一樣，放在同一排才不會高高低低
+function swingNoteSvg(){
+  const HEAD_Y = 25, STEM_TOP = 5, cx = 12;
+  const sx = cx + 2.3;                       // 符桿的左緣
+  let out = '<ellipse cx="' + cx + '" cy="' + HEAD_Y + '" rx="3.1" ry="2.3" transform="rotate(-20 ' + cx + ' ' + HEAD_Y + ')" fill="currentColor"/>';
+  out += '<rect x="' + sx + '" y="' + STEM_TOP + '" width="1.1" height="' + (HEAD_Y - 0.5 - STEM_TOP) + '" fill="currentColor"/>';
+  // 旗子：從符桿頂端往右下彎出去再收回來
+  const fx = sx + 1.1;
+  out += '<path d="M' + fx + ' ' + STEM_TOP + ' C' + (fx + 0.4) + ' 9 ' + (fx + 6.4) + ' 10 ' + (fx + 4.7) + ' 16.8' +
+         ' C' + (fx + 5.4) + ' 12.6 ' + (fx + 1.5) + ' 11.2 ' + fx + ' 10.2 Z" fill="currentColor"/>';
+  out += '<text x="13" y="36.5" text-anchor="middle" font-size="8" font-weight="700" font-style="italic" fill="currentColor">swing</text>';
+  return '<svg class="subnote" viewBox="0 0 26 38" aria-hidden="true">' + out + '</svg>';
 }
 
 /* ---------- 語言 ----------
@@ -2797,6 +2819,9 @@ const UI_ZH = {
   subAria:     (n, name) => '一拍分成 ' + n + ' 等分（' + name + '）',
   dur:         { 1:'四分', 0.5:'八分', 0.25:'十六' },
   tuplet:      n => ({ 1:'一', 2:'二', 3:'三', 4:'四', 5:'五', 6:'六', 7:'七' })[n] + '連',
+  swing:       'Swing',
+  swingAria:   'Swing 搖擺（三連音，中間那顆不響）',
+  swingPer:    'Swing（搖擺）',
 
   // 耗時
   calcTitle:   '耗時',
@@ -3051,6 +3076,9 @@ const UI_EN = {
   subAria:     (n, name) => 'Split each beat into ' + n + ' (' + name + ')',
   dur:         { 1:'Quarter', 0.5:'Eighth', 0.25:'16th' },
   tuplet:      n => ({ 3:'Triplet', 5:'Quintuplet', 6:'Sextuplet', 7:'Septuplet' })[n] || (n + '-tuplet'),
+  swing:       'Swing',
+  swingAria:   'Swing (triplet feel, middle note silent)',
+  swingPer:    'Swing (triplet feel)',
 
   calcTitle:   'Duration',
   unset:       'Not set',
@@ -3739,7 +3767,11 @@ function makeSchedule(){
   if (st.count && st.count.on) return makeCountSchedule();
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  const sub = st.subLocal || st.sub;
+  // Swing 的代號是 8（見 SWING）：格子用三連音，中間那顆在 beatInfo 裡靜掉。
+  // 這段會被測試單獨切出來跑，引用不到外面的常數，所以直接寫 8
+  const raw = st.subLocal || st.sub;
+  const swing = raw === 8;
+  const sub = swing ? 3 : raw;
   const R = st.ramp || { on:false };
   const on = !!R.on && R.step > 0 && R.target > bpm0;
   const segBeats = Math.max(1, (R.bars || 4) * beats); // 一段有幾個主拍
@@ -3756,7 +3788,7 @@ function makeSchedule(){
 
   const M = st.mute || { on:false };
   const api = {
-    sub, on,
+    sub, on, swing,
     // 背景音軌怎麼循環：沒開漸快就是週期性的。
     // 一個週期要包含完整的靜音循環，不然循環接縫會把「有聲幾小節、靜音幾小節」切亂。
     periodic: !on,
@@ -3803,7 +3835,11 @@ function makeSchedule(){
 function makeCountSchedule(){
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  const sub = st.subLocal || st.sub;
+  // Swing 的代號是 8（見 SWING）：格子用三連音，中間那顆在 beatInfo 裡靜掉。
+  // 這段會被測試單獨切出來跑，引用不到外面的常數，所以直接寫 8
+  const raw = st.subLocal || st.sub;
+  const swing = raw === 8;
+  const sub = swing ? 3 : raw;
   const perBar = beats * sub;
   const R = st.ramp || { on:false };
   const rampOn = !!R.on && R.step > 0 && R.target > bpm0;
@@ -3839,7 +3875,7 @@ function makeCountSchedule(){
   const barOf = n => Math.floor(n / perBar);
 
   const api = {
-    sub, on: rampOn,
+    sub, on: rampOn, swing,
     // 背景音軌：沒開漸快的話，循環模式從頭就是週期性的（一輪 = 預備＋樂句）；
     // 只預備一次的話，數完預備拍之後才開始週期性，一個週期要包含完整的靜音循環。
     periodic: !rampOn,
@@ -3892,6 +3928,9 @@ function beatInfo(n){
   let kind = !isMain ? 'sub'
     : !st.accents[beatNo] ? 'beat'
     : beatNo === 0 ? 'first' : 'accent';
+
+  // Swing：三連音的格子，每拍中間那顆不響，聽起來就是「長－短、長－短」
+  if (sched.swing && n % sub === 1) kind = null;
 
   // 靜音訓練：每 play 小節有聲，接著 rest 小節不發聲，循環。
   // 拍點時刻完全不變，只是這幾小節不出聲，所以回來的時候還是對齊的。
@@ -4437,7 +4476,7 @@ function renderSubs(){
     const n = Number(b.dataset.n);
     b.innerHTML = subNoteSvg(n);
     b.title = subLabel(n);
-    b.setAttribute('aria-label', UI.subAria(n, subLabel(n)));
+    b.setAttribute('aria-label', n === SWING ? UI.swingAria : UI.subAria(n, subLabel(n)));
     b.classList.toggle('on', n === st.sub);
   }
   renderMySub();
@@ -4449,6 +4488,7 @@ function renderSubs(){
 // 點開才選：一整排八顆按鈕太佔版面，但原生的下拉選單只能放文字、放不了音符圖，
 // 所以自己做一個——平常收成一行，點了跳出清單，每一列都有音符圖加文字
 function mySubText(n){
+  if (n === SWING) return UI.swingPer;
   return n ? UI.mySubPer(subLabel(n), n) : UI.mySubFollow;
 }
 function renderMySub(){
