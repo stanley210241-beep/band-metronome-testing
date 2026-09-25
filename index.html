@@ -115,15 +115,15 @@ html[lang="en"] #room .roomcode .role::before{display:none}
 #room .cell.count{border-style:dashed !important;
   border-color:color-mix(in srgb, var(--brass) 70%, transparent) !important;
   background:color-mix(in srgb, var(--brass) 14%, transparent) !important}
-/* 漸快、靜音訓練可以直接打的數字格：看起來像數字，但有淡淡外框提示可以點 */
-#room details .numin{box-sizing:border-box;width:2.4em;padding:.12rem 0;margin:0;
+/* 每小節拍數、漸快、靜音訓練可以直接打的數字格：看起來像數字，但有淡淡外框提示可以點 */
+#room details .numin,#room #beatsVal{box-sizing:border-box;width:2.4em;padding:.12rem 0;margin:0;
   border:1px solid color-mix(in srgb, var(--line) 80%, transparent);border-radius:8px;
   background:color-mix(in srgb, var(--card-soft) 70%, transparent);
   font-family:var(--display);font-weight:700;text-align:center;font-variant-numeric:tabular-nums;
   -webkit-appearance:none;appearance:none;outline:0;box-shadow:none;min-width:0}
 #room details .numin.setval{font-size:1.02rem}
 #room details .numin.val{font-size:.9rem;width:3.2em;min-width:0;flex:0 0 auto}  /* .volrow input 預設會撐滿，這格不要 */
-#room details .numin:focus{border-color:var(--brass);background:var(--card)}
+#room details .numin:focus,#room #beatsVal:focus{border-color:var(--brass);background:var(--card)}
 /* 耳機延遲：滑桿兩邊的 −／＋ */
 #room details > .latrow{display:flex;align-items:center;gap:.6rem;margin:.6rem .9rem 0 !important}
 #room details > .latrow input[type=range]{flex:1;min-width:0;width:auto;margin:0}
@@ -1915,22 +1915,25 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 /* 我的細分：收起來是一行，點開是有音符圖的清單 */
 /* 外面包一層 div 來承接面板給子元素的左右邊距：按鈕自己寫 width:100% 再加邊距會撐出框外，
    但按鈕是表單元件，寬度設 auto 又只會縮到文字寬度，所以讓外層負責對齊、裡面填滿 */
-.mysub-pick{margin-top:.6rem}
-.mysub-btn{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
+.subpick-wrap{margin-top:.6rem}
+/* 主畫面的細分按鈕（房間的）：放在原本那排按鈕的位置 */
+.subpick-row{margin:.1rem 0 .15rem}
+.subpick-row .subpick-cur svg{height:1.7rem}
+.subpick-btn{display:flex;align-items:center;justify-content:space-between;gap:.5rem;width:100%;
   margin:0;padding:.5rem .7rem;border-radius:10px;
   border:1px solid var(--line) !important;background:var(--card-soft) !important;color:var(--navy) !important}
-.mysub-cur{display:flex;align-items:center;gap:.5rem;min-width:0;font-size:.88rem}
-.mysub-cur svg{height:1.5rem;width:auto;flex:0 0 auto}
-.mysub-caret{width:1rem;height:1rem;flex:0 0 auto;opacity:.7}
-.mysub-sheet{max-width:20rem;padding-top:1.2rem}
-.mysub-sheet .fb-title{display:block;margin:0 0 .8rem;text-align:center}
-.mysub-list{display:flex;flex-direction:column;gap:.35rem;max-height:60vh;overflow:auto}
-.mysub-opt{display:flex;align-items:center;gap:.7rem;width:100%;padding:.5rem .7rem;border-radius:12px;
+.subpick-cur{display:flex;align-items:center;gap:.5rem;min-width:0;font-size:.88rem}
+.subpick-cur svg{height:1.5rem;width:auto;flex:0 0 auto}
+.subpick-caret{width:1rem;height:1rem;flex:0 0 auto;opacity:.7}
+.subpick-sheet{max-width:20rem;padding-top:1.2rem}
+.subpick-sheet .fb-title{display:block;margin:0 0 .8rem;text-align:center}
+.subpick-list{display:flex;flex-direction:column;gap:.35rem;max-height:60vh;overflow:auto}
+.subpick-opt{display:flex;align-items:center;gap:.7rem;width:100%;padding:.5rem .7rem;border-radius:12px;
   border:1px solid var(--line) !important;background:var(--card-soft) !important;color:var(--navy) !important;
   font-size:.9rem;text-align:left}
-.mysub-opt .mysub-note{display:flex;align-items:center;justify-content:center;width:2.4rem;flex:0 0 auto}
-.mysub-opt .mysub-note svg{height:1.6rem;width:auto}
-.mysub-opt.on{border-color:var(--brass) !important;background:color-mix(in srgb,var(--brass) 12%,transparent) !important;
+.subpick-opt .subpick-note{display:flex;align-items:center;justify-content:center;width:2.4rem;flex:0 0 auto}
+.subpick-opt .subpick-note svg{height:1.6rem;width:auto}
+.subpick-opt.on{border-color:var(--brass) !important;background:color-mix(in srgb,var(--brass) 12%,transparent) !important;
   color:var(--brass) !important;font-weight:650}
 </style>
 </head>
@@ -2058,13 +2061,19 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
       <div class="setrow">
         <span data-i18n="beatsBefore">每小節</span>
         <button class="mini" id="beatsMinus" aria-label="減少拍數" data-i18n-aria="beatsLess">−</button>
-        <span class="setval" id="beatsVal">4</span>
+        <input class="setval numin" id="beatsVal" value="4" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" enterkeyhint="done" autocomplete="off" aria-label="每小節幾拍" data-i18n-aria="beatsValAria">
         <button class="mini" id="beatsPlus" aria-label="增加拍數" data-i18n-aria="beatsMore">＋</button>
         <span data-i18n="beatsAfter">拍</span>
         <button class="unitbtn" id="tapBtn" aria-label="跟著節奏連點幾下，算出速度" data-i18n-aria="tapAria">Tap</button>
       </div>
 
-      <div class="chips" id="subRow"></div>
+      <!-- 細分：一顆按鈕顯示目前的節奏，點開是選單。選單跟「我的細分」共用同一個 -->
+      <div class="subpick-row" id="subRow">
+        <button class="subpick-btn" id="subBtn" aria-haspopup="dialog" aria-label="細分" data-i18n-aria="subTitle">
+          <span class="subpick-cur" id="subCur"></span>
+          <svg class="subpick-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
 
       <div class="rowctl">
         <button class="step" id="minus" aria-label="慢一格" data-i18n-aria="slower">−</button>
@@ -2079,6 +2088,36 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
 
     <button id="resumeBar" class="btn" style="display:none"></button>
     <p id="roomMsg" class="err" style="text-align:center;font-size:.82rem"></p>
+
+    <!-- 耳機延遲 -->
+    <details>
+      <summary><span data-i18n="latTitle">我的耳機延遲</span> <b id="latLabel">0 ms</b></summary>
+      <div class="latrow">
+        <button class="mini" id="latMinus" aria-label="延遲減 5 毫秒" data-i18n-aria="latLess">−</button>
+        <input id="latRange" type="range" min="-400" max="400" step="5" value="0" aria-label="耳機延遲" data-i18n-aria="latAria">
+        <button class="mini" id="latPlus" aria-label="延遲加 5 毫秒" data-i18n-aria="latMore">＋</button>
+      </div>
+      <!-- 房主是大家對拍的基準，他的延遲鎖住不能調（只鎖不歸零：換房主時聲音才不會突然變） -->
+      <p class="hint lat-owner" id="latOwnerNote" data-i18n="latOwner" hidden>你是房主，大家以你為準，你的延遲不用調（也調不了）。</p>
+      <p class="hint" data-i18n="latHint1">以房主為準：你聽到的拍子比房主慢就往右拉，比房主快就往左拉，直到跟房主一致。
+        有線耳機通常不用調，藍牙耳機大約要往右 120–250。這個設定只影響你自己。</p>
+      <p class="hint" data-i18n="latHint2">聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。
+        長時間大音量會傷聽力，而且是不可逆的。</p>
+    </details>
+
+    <!-- 我的細分（每個人自己的，不受鎖影響）。主拍時刻完全不變，只是這支手機多聽或少聽幾顆細分，
+         所以跟大家還是對齊的：貝斯手可以只聽主拍，鼓手可以聽十六分 -->
+    <details>
+      <summary><span data-i18n="mySubTitle">我的細分</span> <b id="mySubLabel" data-i18n="mySubFollow">跟著房間</b></summary>
+      <!-- 點開才選：原生的下拉選單只能放文字，放不了音符圖，所以自己做一個 -->
+      <div class="subpick-wrap">
+        <button class="subpick-btn" id="mySubBtn" aria-haspopup="dialog" aria-label="我的細分" data-i18n-aria="mySubTitle">
+          <span class="subpick-cur" id="mySubCur"></span>
+          <svg class="subpick-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <p class="hint" data-i18n="mySubHint">只改你自己聽到的細分，拍子還是跟大家一樣。</p>
+    </details>
 
     <!-- 預備拍（可以每個樂句前都重新數，循環練同一段） -->
     <details>
@@ -2164,36 +2203,6 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
           <span data-i18n="muteBars">小節</span>
         </span>
       </div>
-    </details>
-
-    <!-- 我的細分（每個人自己的，不受鎖影響）。主拍時刻完全不變，只是這支手機多聽或少聽幾顆細分，
-         所以跟大家還是對齊的：貝斯手可以只聽主拍，鼓手可以聽十六分 -->
-    <details>
-      <summary><span data-i18n="mySubTitle">我的細分</span> <b id="mySubLabel" data-i18n="mySubFollow">跟著房間</b></summary>
-      <!-- 點開才選：原生的下拉選單只能放文字，放不了音符圖，所以自己做一個 -->
-      <div class="mysub-pick">
-        <button class="mysub-btn" id="mySubBtn" aria-haspopup="dialog" aria-label="我的細分" data-i18n-aria="mySubTitle">
-          <span class="mysub-cur" id="mySubCur"></span>
-          <svg class="mysub-caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6.5 8 10.5l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </div>
-      <p class="hint" data-i18n="mySubHint">只改你自己聽到的細分，拍子還是跟大家一樣。</p>
-    </details>
-
-    <!-- 耳機延遲 -->
-    <details>
-      <summary><span data-i18n="latTitle">我的耳機延遲</span> <b id="latLabel">0 ms</b></summary>
-      <div class="latrow">
-        <button class="mini" id="latMinus" aria-label="延遲減 5 毫秒" data-i18n-aria="latLess">−</button>
-        <input id="latRange" type="range" min="-400" max="400" step="5" value="0" aria-label="耳機延遲" data-i18n-aria="latAria">
-        <button class="mini" id="latPlus" aria-label="延遲加 5 毫秒" data-i18n-aria="latMore">＋</button>
-      </div>
-      <!-- 房主是大家對拍的基準，他的延遲鎖住不能調（只鎖不歸零：換房主時聲音才不會突然變） -->
-      <p class="hint lat-owner" id="latOwnerNote" data-i18n="latOwner" hidden>你是房主，大家以你為準，你的延遲不用調（也調不了）。</p>
-      <p class="hint" data-i18n="latHint1">以房主為準：你聽到的拍子比房主慢就往右拉，比房主快就往左拉，直到跟房主一致。
-        有線耳機通常不用調，藍牙耳機大約要往右 120–250。這個設定只影響你自己。</p>
-      <p class="hint" data-i18n="latHint2">聽不到的時候，先換隔音好的耳機，再考慮用音量鍵調大。
-        長時間大音量會傷聽力，而且是不可逆的。</p>
     </details>
 
     <div class="stack" style="margin-top:.7rem">
@@ -2422,11 +2431,11 @@ body.in-room.leaving .tabbar{animation:tabbarDown .16s ease-in forwards}
   </div>
 
   <!-- 我的細分：點「我的細分」那一行會打開，每個選項都有音符圖 -->
-  <div id="mySubSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="mySubSheetTitle" hidden>
-    <div class="sheet-card mysub-sheet">
-      <button class="sheet-close" id="mySubClose" aria-label="關閉" data-i18n-aria="close">×</button>
-      <h2 class="fb-title" id="mySubSheetTitle" data-i18n="mySubTitle">我的細分</h2>
-      <div class="mysub-list" id="mySubList"></div>
+  <div id="subSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="subSheetTitle" hidden>
+    <div class="sheet-card subpick-sheet">
+      <button class="sheet-close" id="subClose" aria-label="關閉" data-i18n-aria="close">×</button>
+      <h2 class="fb-title" id="subSheetTitle" data-i18n="mySubTitle">我的細分</h2>
+      <div class="subpick-list" id="subList"></div>
     </div>
   </div>
 
@@ -2656,10 +2665,11 @@ function needsServerSetup(){
   return !/^https?:\/\//.test(base) || /^file:/.test(base);
 }
 
-const SUB_LIST = [1, 2, 3, 4, 5, 6, 7, 8];
-// 最後那個 8 是 Swing（shuffle）的代號，不是「一拍 8 下」：
-// 用三連音的格子，每拍只響第 1、3 顆，中間那顆不響。
-// 拍點時刻跟三連音完全一樣，所以不會斷拍、也不會跟別人跑掉。
+// 選單裡的順序：常用的在前面，七連音放最後（舊曲目存著的照樣能用）。
+// 1～7 是一拍平均切幾等分；8 以後是節奏型態的代號，不是「一拍 8 下」——
+// 8 = Swing、9～12 = 前附點八後十六、前十六後附點八、前八後十六、前十六後八。
+// 每個代號實際怎麼切、哪幾格響，都寫在 rhythmOf
+const SUB_LIST = [1, 2, 3, 4, 8, 9, 10, 11, 12, 6, 5, 7];
 // SWING 要寫在 SUB_LIST 下面：測試是從 SUB_LIST 這一行開始切的，寫在上面會被切掉
 const SWING = 8;
 
@@ -2684,6 +2694,7 @@ function durName(len){
 // 切不出標準音符長度的（三等分、五等分…）就叫幾連音。
 function subLabel(k){
   if (k === SWING) return UI.swing;
+  if (UI.rhythm[k]) return UI.rhythm[k];
   const { len, tuplet } = subNotation(k);
   return tuplet ? UI.tuplet(k) : durName(len);
 }
@@ -2704,6 +2715,7 @@ const BEAMS = { 1:0, 0.5:1, 0.25:2 };
 
 function subNoteSvg(k){
   if (k === SWING) return swingNoteSvg();
+  if (UI.rhythm[k]) return cellNoteSvg(k);
   const { len, tuplet } = subNotation(k);
   const beams = BEAMS[len];
   const HEAD_Y = 25, STEM_TOP = 5;
@@ -2745,6 +2757,46 @@ function swingNoteSvg(){
          ' C' + (fx + 5.4) + ' 12.6 ' + (fx + 1.5) + ' 11.2 ' + fx + ' 10.2 Z" fill="currentColor"/>';
   out += '<text x="13" y="36.5" text-anchor="middle" font-size="8" font-weight="700" font-style="italic" fill="currentColor">swing</text>';
   return '<svg class="subnote" viewBox="0 0 26 38" aria-hidden="true">' + out + '</svg>';
+}
+
+// 前八後十六這類「一拍裡長短不一」的節奏。每個音符多長是從 rhythmOf 實際會響的格子推出來的，
+// 所以圖一定跟聽到的一致。畫法照樂譜：全部用橫槓連在一起（八分那一條），
+// 十六分多一條（相鄰兩個十六分連成一條，單獨一個就畫短槓、朝旁邊的音符伸過去），
+// 附點八分在符頭右邊點一個點
+function cellNoteSvg(k){
+  const { grid, play } = rhythmOf(k);
+  const on = [];
+  play.forEach((p, i) => { if (p) on.push(i); });
+  const durs = on.map((s, i) => ((i + 1 < on.length ? on[i + 1] : grid) - s) / grid);   // 一拍 = 1
+  const is = (d, v) => Math.abs(d - v) < 1e-9;
+  const HEAD_Y = 25, STEM_TOP = 5, BEAM2 = STEM_TOP + 3.4;
+  const beam = (x1, x2, y) => '<rect x="' + x1 + '" y="' + y + '" width="' + (x2 - x1) + '" height="2.2" fill="currentColor"/>';
+  const stem = [];
+  let out = '', x = 4.5, right = 0;
+  durs.forEach(d => {
+    out += '<ellipse cx="' + x + '" cy="' + HEAD_Y + '" rx="3.1" ry="2.3" transform="rotate(-20 ' + x + ' ' + HEAD_Y + ')" fill="currentColor"/>';
+    out += '<rect x="' + (x + 2.3) + '" y="' + STEM_TOP + '" width="1.1" height="' + (HEAD_Y - 0.5 - STEM_TOP) + '" fill="currentColor"/>';
+    stem.push(x + 2.3);
+    right = x + 3.4;
+    if (is(d, 0.75)){
+      out += '<circle cx="' + (x + 6.2) + '" cy="' + (HEAD_Y - 0.4) + '" r="1.2" fill="currentColor"/>';
+      right = x + 7.4;
+      x += 11;             // 附點要多留一點位置給那個點
+    } else {
+      x += 7.5;
+    }
+  });
+  out += beam(stem[0], stem[stem.length - 1] + 1.1, STEM_TOP);
+  durs.forEach((d, i) => {
+    if (!is(d, 0.25)) return;
+    const next16 = i + 1 < durs.length && is(durs[i + 1], 0.25);
+    const prev16 = i > 0 && is(durs[i - 1], 0.25);
+    if (next16) out += beam(stem[i], stem[i + 1] + 1.1, BEAM2);
+    else if (!prev16) out += i === durs.length - 1 ? beam(stem[i] - 3.4, stem[i] + 1.1, BEAM2)
+                                                   : beam(stem[i], stem[i] + 4.5, BEAM2);
+  });
+  const w = Math.max(right, stem[stem.length - 1] + 1.1) + 1.5;
+  return '<svg class="subnote" viewBox="0 0 ' + w.toFixed(1) + ' 38" aria-hidden="true">' + out + '</svg>';
 }
 
 /* ---------- 語言 ----------
@@ -2815,6 +2867,7 @@ const UI_ZH = {
   beatsAfter:  '拍',
   beatsLess:   '減少拍數',
   beatsMore:   '增加拍數',
+  beatsValAria:'每小節幾拍',
   cellAria:    (i, acc) => '第 ' + i + ' 拍' + (acc ? '，重音' : ''),
   subAria:     (n, name) => '一拍分成 ' + n + ' 等分（' + name + '）',
   dur:         { 1:'四分', 0.5:'八分', 0.25:'十六' },
@@ -2822,6 +2875,9 @@ const UI_ZH = {
   swing:       'Swing',
   swingAria:   'Swing 搖擺（三連音，中間那顆不響）',
   swingPer:    'Swing（搖擺）',
+  // 節奏型態（代號 9～12，見 rhythmOf）
+  rhythm:      { 9:'前附點八後十六', 10:'前十六後附點八', 11:'前八後十六', 12:'前十六後八' },
+  subTitle:    '細分',
 
   // 耗時
   calcTitle:   '耗時',
@@ -3072,6 +3128,7 @@ const UI_EN = {
   beatsAfter:  'per bar',
   beatsLess:   'Fewer beats',
   beatsMore:   'More beats',
+  beatsValAria:'Beats per bar',
   cellAria:    (i, acc) => 'Beat ' + i + (acc ? ', accented' : ''),
   subAria:     (n, name) => 'Split each beat into ' + n + ' (' + name + ')',
   dur:         { 1:'Quarter', 0.5:'Eighth', 0.25:'16th' },
@@ -3079,6 +3136,8 @@ const UI_EN = {
   swing:       'Swing',
   swingAria:   'Swing (triplet feel, middle note silent)',
   swingPer:    'Swing (triplet feel)',
+  rhythm:      { 9:'Dotted 8th + 16th', 10:'16th + dotted 8th', 11:'8th + two 16ths', 12:'Two 16ths + 8th' },
+  subTitle:    'Subdivision',
 
   calcTitle:   'Duration',
   unset:       'Not set',
@@ -3767,11 +3826,9 @@ function makeSchedule(){
   if (st.count && st.count.on) return makeCountSchedule();
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  // Swing 的代號是 8（見 SWING）：格子用三連音，中間那顆在 beatInfo 裡靜掉。
-  // 這段會被測試單獨切出來跑，引用不到外面的常數，所以直接寫 8
-  const raw = st.subLocal || st.sub;
-  const swing = raw === 8;
-  const sub = swing ? 3 : raw;
+  // 一拍切幾格、哪幾格響（swing、前八後十六這類），見 rhythmOf
+  const rhythm = rhythmOf(st.subLocal || st.sub);
+  const sub = rhythm.grid;
   const R = st.ramp || { on:false };
   const on = !!R.on && R.step > 0 && R.target > bpm0;
   const segBeats = Math.max(1, (R.bars || 4) * beats); // 一段有幾個主拍
@@ -3788,7 +3845,7 @@ function makeSchedule(){
 
   const M = st.mute || { on:false };
   const api = {
-    sub, on, swing,
+    sub, on, play: rhythm.play,
     // 背景音軌怎麼循環：沒開漸快就是週期性的。
     // 一個週期要包含完整的靜音循環，不然循環接縫會把「有聲幾小節、靜音幾小節」切亂。
     periodic: !on,
@@ -3825,6 +3882,27 @@ function makeSchedule(){
   return api;
 }
 
+// 每一種細分都是「一拍切幾格、哪幾格響」。1～7 是平均切、每格都響；
+// 8 以後是節奏型態：格子照切，只是有幾格不響，所以拍點時刻跟平均切完全一樣，
+// 開關、切換都不會斷拍，也不會跟別人跑掉。
+//   8   Swing            三連音的格子，響第 1、3 格（長－短，2:1）
+//   9   前附點八後十六    十六分的格子，響第 1、4 格（3:1）
+//   10  前十六後附點八    響第 1、2 格
+//   11  前八後十六        響第 1、3、4 格
+//   12  前十六後八        響第 1、2、3 格
+// 會跟時刻表一起被測試單獨切出來跑，所以寫在這一段、不引用外面的常數。
+// 畫面上的音符圖也是從這裡推出來的（cellNoteSvg），圖跟聽到的一定一致
+function rhythmOf(k){
+  const P = {
+    8:  { grid: 3, play: [1, 0, 1] },
+    9:  { grid: 4, play: [1, 0, 0, 1] },
+    10: { grid: 4, play: [1, 1, 0, 0] },
+    11: { grid: 4, play: [1, 0, 1, 1] },
+    12: { grid: 4, play: [1, 1, 1, 0] },
+  };
+  return P[k] || { grid: k, play: null };
+}
+
 // 有預備拍時的時刻表。時間軸是一小節一小節排的，每小節是下面其中一種：
 //   預備拍小節：只數主拍，不算進樂句，也不算進漸快
 //   樂句小節：  照常發聲；靜音訓練從樂句的第一小節開始數
@@ -3835,11 +3913,9 @@ function makeSchedule(){
 function makeCountSchedule(){
   const bpm0 = grid.bpm;
   const beats = st.beats;
-  // Swing 的代號是 8（見 SWING）：格子用三連音，中間那顆在 beatInfo 裡靜掉。
-  // 這段會被測試單獨切出來跑，引用不到外面的常數，所以直接寫 8
-  const raw = st.subLocal || st.sub;
-  const swing = raw === 8;
-  const sub = swing ? 3 : raw;
+  // 一拍切幾格、哪幾格響（swing、前八後十六這類），見 rhythmOf
+  const rhythm = rhythmOf(st.subLocal || st.sub);
+  const sub = rhythm.grid;
   const perBar = beats * sub;
   const R = st.ramp || { on:false };
   const rampOn = !!R.on && R.step > 0 && R.target > bpm0;
@@ -3875,7 +3951,7 @@ function makeCountSchedule(){
   const barOf = n => Math.floor(n / perBar);
 
   const api = {
-    sub, on: rampOn, swing,
+    sub, on: rampOn, play: rhythm.play,
     // 背景音軌：沒開漸快的話，循環模式從頭就是週期性的（一輪 = 預備＋樂句）；
     // 只預備一次的話，數完預備拍之後才開始週期性，一個週期要包含完整的靜音循環。
     periodic: !rampOn,
@@ -3929,8 +4005,8 @@ function beatInfo(n){
     : !st.accents[beatNo] ? 'beat'
     : beatNo === 0 ? 'first' : 'accent';
 
-  // Swing：三連音的格子，每拍中間那顆不響，聽起來就是「長－短、長－短」
-  if (sched.swing && n % sub === 1) kind = null;
+  // 節奏型態（swing、前八後十六…）：格子照切，只是有幾格不響，拍點時刻完全不動
+  if (sched.play && !sched.play[n % sub]) kind = null;
 
   // 靜音訓練：每 play 小節有聲，接著 rest 小節不發聲，循環。
   // 拍點時刻完全不變，只是這幾小節不出聲，所以回來的時候還是對齊的。
@@ -4375,6 +4451,9 @@ setInterval(paintAudioInfo, 1000);
 let rowSig = '';
 
 function renderBeats(){
+  // 數字格放在最前面：拍數沒變（例如打了空白、或被上鎖擋下）時下面會提早 return，
+  // 格子還是要改回實際的拍數
+  showNum('beatsVal', st.beats);     // 正在打的時候不要被蓋掉
   const sig = st.beats + ':' + st.accents.join('');
   if (sig === rowSig) return;
   rowSig = sig;
@@ -4389,7 +4468,6 @@ function renderBeats(){
     b.onclick = () => toggleAccent(i);
     row.appendChild(b);
   }
-  $('beatsVal').textContent = st.beats;
 }
 
 // 重音規則：只要有任何重音，第一拍就一定是重音——不然聽不出小節從哪裡開始。
@@ -4456,68 +4534,75 @@ function paintTempo(bpmNow, bar, count){
   }
 }
 
-/* ---------- 8. 細分按鈕 ---------- */
+/* ---------- 8. 細分按鈕 ----------
+   房間的細分和「我的細分」各有一顆按鈕，點開是同一個選單（每一列都有音符圖）。
+   兩個入口分開放：一個改全團、一個只改自己，才不會搞混現在改的是誰的；
+   房間上鎖時，團員點房間那顆會直接被擋下，只碰得到自己那顆。
+   一整排按鈕放不下越來越多的節奏型態，原生的下拉選單又放不了音符圖，所以自己做選單。 */
+
+// 選單列和按鈕上的字。平均切的補上「一拍幾下」，節奏型態的名字本身就說明了
+function subText(n){
+  if (!n) return UI.mySubFollow;
+  if (n === SWING) return UI.swingPer;
+  if (UI.rhythm[n]) return UI.rhythm[n];
+  return UI.mySubPer(subLabel(n), n);
+}
 
 function renderSubs(){
-  const row = $('subRow');
-  if (!row.children.length){
-    for (const n of SUB_LIST){
-      const b = document.createElement('button');
-      b.className = 'subchip';
-      b.dataset.n = n;
-      b.onclick = () => {
-        if (!guard()) return;
-        st.sub = n; renderSubs(); reschedule(); send({ t:'sub', sub:n });
-      };
-      row.appendChild(b);
-    }
-  }
-  for (const b of row.children){
-    const n = Number(b.dataset.n);
-    b.innerHTML = subNoteSvg(n);
-    b.title = subLabel(n);
-    b.setAttribute('aria-label', n === SWING ? UI.swingAria : UI.subAria(n, subLabel(n)));
-    b.classList.toggle('on', n === st.sub);
-  }
+  $('subCur').innerHTML = subNoteSvg(st.sub) + '<span>' + subText(st.sub) + '</span>';
+  $('subBtn').setAttribute('aria-label', UI.subTitle + '：' + subText(st.sub));
   renderMySub();
 }
 
 /* ---------- 我的細分 ----------
    房間的速度、拍號、重音照舊同步，只有「一拍聽幾顆」可以自己決定。
-   因為主拍的時刻沒變，所以選幾等分都跟大家對得上。 */
-// 點開才選：一整排八顆按鈕太佔版面，但原生的下拉選單只能放文字、放不了音符圖，
-// 所以自己做一個——平常收成一行，點了跳出清單，每一列都有音符圖加文字
-function mySubText(n){
-  if (n === SWING) return UI.swingPer;
-  return n ? UI.mySubPer(subLabel(n), n) : UI.mySubFollow;
-}
+   因為主拍的時刻沒變，所以選哪一種都跟大家對得上。 */
 function renderMySub(){
-  const list = $('mySubList');
-  if (!list.children.length){
-    for (const n of [0, ...SUB_LIST]){
-      const b = document.createElement('button');
-      b.className = 'mysub-opt';
-      b.dataset.n = n;
-      b.innerHTML = '<span class="mysub-note"></span><span class="mysub-name"></span>';
-      b.onclick = () => { setMySub(n); closeSheet('mySubSheet'); };
-      list.appendChild(b);
-    }
-  }
-  // 「跟著房間」那一列畫房間目前的音符，順便告訴你現在房間是幾等分
-  for (const b of list.children){
-    const n = Number(b.dataset.n);
-    b.querySelector('.mysub-note').innerHTML = subNoteSvg(n || st.sub);
-    b.querySelector('.mysub-name').textContent = n ? mySubText(n)
-      : UI.mySubFollow + '（' + subLabel(st.sub) + '）';
-    b.classList.toggle('on', n === mySub);
-  }
   $('mySubCur').innerHTML = subNoteSvg(mySub || st.sub) +
-    '<span>' + (mySub ? mySubText(mySub) : UI.mySubFollow) + '</span>';
+    '<span>' + (mySub ? subText(mySub) : UI.mySubFollow) + '</span>';
   $('mySubLabel').textContent = mySub ? subLabel(mySub) : UI.mySubFollow;
+  if (!$('subSheet').hidden) renderSubList();     // 選單開著的時候，房間換了也要跟著更新
 }
 
-$('mySubBtn').onclick = () => openSheet('mySubSheet');
-$('mySubClose').onclick = () => closeSheet('mySubSheet');
+// 選單現在是替誰選：'room' = 房間（全團），'mine' = 我的細分
+let subPickFor = 'mine';
+
+function renderSubList(){
+  const room = subPickFor === 'room';
+  const list = $('subList');
+  list.innerHTML = '';
+  for (const n of room ? SUB_LIST : [0, ...SUB_LIST]){
+    const b = document.createElement('button');
+    b.className = 'subpick-opt';
+    b.dataset.n = n;
+    // 「跟著房間」那一列畫房間目前的音符，順便告訴你房間現在是哪一種
+    b.innerHTML = '<span class="subpick-note">' + subNoteSvg(n || st.sub) + '</span>' +
+                  '<span class="subpick-name"></span>';
+    b.querySelector('.subpick-name').textContent = n ? subText(n)
+      : UI.mySubFollow + '（' + subLabel(st.sub) + '）';
+    b.classList.toggle('on', n === (room ? st.sub : mySub));
+    b.onclick = () => room ? pickRoomSub(n) : (setMySub(n), closeSheet('subSheet'));
+    list.appendChild(b);
+  }
+}
+
+function openSubPicker(forWhom){
+  subPickFor = forWhom;
+  $('subSheetTitle').textContent = forWhom === 'room' ? UI.subTitle : UI.mySubTitle;
+  renderSubList();
+  openSheet('subSheet');
+}
+
+function pickRoomSub(n){
+  if (!guard()) return;          // 選單開著的時候房間剛好被鎖上，這裡還是要擋
+  closeSheet('subSheet');
+  if (n === st.sub) return;
+  st.sub = n; renderSubs(); reschedule(); send({ t:'sub', sub:n });
+}
+
+$('subBtn').onclick = () => { if (guard()) openSubPicker('room'); };
+$('mySubBtn').onclick = () => openSubPicker('mine');
+$('subClose').onclick = () => closeSheet('subSheet');
 
 function setMySub(n){
   if (n === mySub) return;
@@ -5926,6 +6011,13 @@ function setBeats(n){
 }
 $('beatsMinus').onclick = () => setBeats(st.beats - 1);
 $('beatsPlus').onclick  = () => setBeats(st.beats + 1);
+// 拍數也可以直接點數字來打（跟漸快、靜音那些數字格一樣）。打完按完成或點別處才算數；
+// 打超過範圍就停在上下限，順便說一句——跟按 −／＋ 按到底說的是同一句
+bindNum('beatsVal', 0, 99, v => {
+  const n = clamp(v, 1, 12);
+  if (n !== v && canControl()) toast(v > 12 ? LINES.tooMany : LINES.tooFew);
+  setBeats(n);
+}, renderBeats);
 
 // 靜音鍵（每個人自己的，不受鎖影響）。拍子照走，只是這支手機不出聲。
 // 跟「靜音訓練」的 renderMute 是兩回事，名字不能撞。
@@ -6054,14 +6146,14 @@ function closeSheet(id){
   s.classList.remove('show');
   setTimeout(() => { s.hidden = true; }, 180);
 }
-for (const id of ['fbSheet', 'qrSheet', 'helpSheet', 'leaveSheet', 'mySubSheet']){
+for (const id of ['fbSheet', 'qrSheet', 'helpSheet', 'leaveSheet', 'subSheet']){
   $(id).addEventListener('click', e => { if (e.target.id === id) closeSheet(id); });   // 點外面關掉
 }
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('qrSheet').hidden) closeSheet('qrSheet');
   if (!$('helpSheet').hidden) closeSheet('helpSheet');
-  if (!$('mySubSheet').hidden) closeSheet('mySubSheet');
+  if (!$('subSheet').hidden) closeSheet('subSheet');
   if (!$('leaveSheet').hidden) $('leaveNo').click();     // 按 Esc 等於選「留下」
   if (!$('fbSheet').hidden) $('fbClose').click();
 });
