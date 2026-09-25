@@ -2878,6 +2878,7 @@ const UI_ZH = {
   // 節奏型態（代號 9～12，見 rhythmOf）
   rhythm:      { 9:'前附點八後十六', 10:'前十六後附點八', 11:'前八後十六', 12:'前十六後八' },
   subTitle:    '細分',
+  subNow:      name => '細分：' + name,
 
   // 耗時
   calcTitle:   '耗時',
@@ -3138,6 +3139,7 @@ const UI_EN = {
   swingPer:    'Swing (triplet feel)',
   rhythm:      { 9:'Dotted 8th + 16th', 10:'16th + dotted 8th', 11:'8th + two 16ths', 12:'Two 16ths + 8th' },
   subTitle:    'Subdivision',
+  subNow:      name => 'Subdivision: ' + name,
 
   calcTitle:   'Duration',
   unset:       'Not set',
@@ -4550,7 +4552,7 @@ function subText(n){
 
 function renderSubs(){
   $('subCur').innerHTML = subNoteSvg(st.sub) + '<span>' + subText(st.sub) + '</span>';
-  $('subBtn').setAttribute('aria-label', UI.subTitle + '：' + subText(st.sub));
+  $('subBtn').setAttribute('aria-label', UI.subNow(subText(st.sub)));
   renderMySub();
 }
 
